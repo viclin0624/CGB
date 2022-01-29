@@ -1,0 +1,1 @@
+from models_dgl import Net1
