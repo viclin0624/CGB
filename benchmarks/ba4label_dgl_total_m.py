@@ -365,6 +365,8 @@ class BA4labelDataset(DGLDataset):
         for _ in range(self.graphs_num):
             which_type = np.random.choice([0,1,2,3])
             perturb_type = np.random.choice([0]+list(self.perturb_dic.keys()))
+            if self.m == None:
+                self.m = np.random.choice([1,3,5])
             if which_type == 0:
                 if perturb_type == 0:
                     G, role_id, plug_id = build_graph(self.nodes_num, self.basis_type, [], start = 0, m = self.m)
@@ -578,7 +580,7 @@ def run(exp_name: str = typer.Argument(..., help="Experiment to run")):
     BATCH_SIZE = 16
     EPOCHS_NUM = 150
     EXPS_NUM = 10
-    M_LIST = [2.2]
+    M_LIST = [1,5]
     LAYERS_LIST = [1,2,3,4]
     if int(exp_name) >= 4:
         NODES_NUM = 50
@@ -587,91 +589,90 @@ def run(exp_name: str = typer.Argument(..., help="Experiment to run")):
     6:{4:'square_diagonal'}, 7:{7:'multi_motif'}}
     perturb_dic = exp_to_perturb[int(exp_name)]
     result_dic = {}
-    
-    for m in tq(M_LIST):
-        for layers in tq(LAYERS_LIST):
-            data = BA4labelDataset(m = m,nodes_num=NODES_NUM, perturb_dic = perturb_dic)
-            dataloader = dgl.dataloading.GraphDataLoader(data, batch_size = BATCH_SIZE, shuffle = True)
-            data2 = BA4labelDataset(m = m,nodes_num=NODES_NUM, perturb_dic = perturb_dic)
-            testdataloader = dgl.dataloading.GraphDataLoader(data2, batch_size = BATCH_SIZE, shuffle = True)
+    m = None
+    for layers in tq(LAYERS_LIST):
+        data = BA4labelDataset(m = None,nodes_num=NODES_NUM, perturb_dic = perturb_dic)
+        dataloader = dgl.dataloading.GraphDataLoader(data, batch_size = BATCH_SIZE, shuffle = True)
+        data2 = BA4labelDataset(m = None,nodes_num=NODES_NUM, perturb_dic = perturb_dic)
+        testdataloader = dgl.dataloading.GraphDataLoader(data2, batch_size = BATCH_SIZE, shuffle = True)
+        
+        total_train_acc = []
+        total_test_acc = []
+        train_acc_dic = {}
+        test_acc_dic = {}
+        for i in range(4):
+            train_acc_dic[i] = [0,0,0,0,0,0] #correct total 0 1 2 3
+            test_acc_dic[i] = [0,0,0,0,0,0] #correct total 0 1 2 3
+
+        for _ in tq(range(EXPS_NUM)):
+            model = Net2(data.num_node_features, data.num_classes, layers, True,
+                                'GraphConvWL').to(device)
+            optimizer = torch.optim.Adam(model.parameters(), lr=0.0003, weight_decay=0)
             
-            total_train_acc = []
-            total_test_acc = []
-            train_acc_dic = {}
-            test_acc_dic = {}
-            for i in range(4):
-                train_acc_dic[i] = [0,0,0,0,0,0] #correct total 0 1 2 3
-                test_acc_dic[i] = [0,0,0,0,0,0] #correct total 0 1 2 3
+            model.train()
+            pbar = tq(range(EPOCHS_NUM))
+            for epoch in pbar:
+                #train
+                loss_all = 0
+                for g, labels in dataloader:
+                    g = g.to(device)
+                    optimizer.zero_grad()
+                    output = model(g, g.ndata['x'])
+                    loss = F.nll_loss(output, labels.to(device))
+                    loss.backward()
+                    loss_all += loss.item()
+                    optimizer.step()
+                train_loss = loss_all/len(dataloader)
+                #train_acc
+                model.eval()
 
-            for _ in tq(range(EXPS_NUM)):
-                model = Net2(data.num_node_features, data.num_classes, layers, True,
-                                    'GraphConvWL').to(device)
-                optimizer = torch.optim.Adam(model.parameters(), lr=0.0003, weight_decay=0)
-                
-                model.train()
-                pbar = tq(range(EPOCHS_NUM))
-                for epoch in pbar:
-                    #train
-                    loss_all = 0
-                    for g, labels in dataloader:
-                        g = g.to(device)
-                        optimizer.zero_grad()
-                        output = model(g, g.ndata['x'])
-                        loss = F.nll_loss(output, labels.to(device))
-                        loss.backward()
-                        loss_all += loss.item()
-                        optimizer.step()
-                    train_loss = loss_all/len(dataloader)
-                    #train_acc
-                    model.eval()
+                correct = 0
+                total = 0
+                for g, labels in dataloader:
+                    g = g.to(device)
+                    output = model(g, g.ndata['x'])
+                    pred = output.max(dim=1)[1]
+                    eq_pred = pred.eq(labels.to(device))
+                    correct += eq_pred.sum().item()
+                    if epoch == EPOCHS_NUM - 1:
+                        for index,label in enumerate(labels.tolist()):
+                            train_acc_dic[label][0] = train_acc_dic[label][0] + eq_pred[index].item()
+                            train_acc_dic[label][1] = train_acc_dic[label][1] + 1
+                            train_acc_dic[label][2] = train_acc_dic[label][2] + int(pred[index] == 0)
+                            train_acc_dic[label][3] = train_acc_dic[label][3] + int(pred[index] == 1)
+                            train_acc_dic[label][4] = train_acc_dic[label][4] + int(pred[index] == 2)
+                            train_acc_dic[label][5] = train_acc_dic[label][5] + int(pred[index] == 3)
+                    total += len(labels.to(device))
+                train_acc = correct/total
+                #test_acc
+                model.eval()
 
-                    correct = 0
-                    total = 0
-                    for g, labels in dataloader:
-                        g = g.to(device)
-                        output = model(g, g.ndata['x'])
-                        pred = output.max(dim=1)[1]
-                        eq_pred = pred.eq(labels.to(device))
-                        correct += eq_pred.sum().item()
-                        if epoch == EPOCHS_NUM - 1:
-                            for index,label in enumerate(labels.tolist()):
-                                train_acc_dic[label][0] = train_acc_dic[label][0] + eq_pred[index].item()
-                                train_acc_dic[label][1] = train_acc_dic[label][1] + 1
-                                train_acc_dic[label][2] = train_acc_dic[label][2] + int(pred[index] == 0)
-                                train_acc_dic[label][3] = train_acc_dic[label][3] + int(pred[index] == 1)
-                                train_acc_dic[label][4] = train_acc_dic[label][4] + int(pred[index] == 2)
-                                train_acc_dic[label][5] = train_acc_dic[label][5] + int(pred[index] == 3)
-                        total += len(labels.to(device))
-                    train_acc = correct/total
-                    #test_acc
-                    model.eval()
+                correct = 0
+                total = 0
+                for g, labels in testdataloader:
+                    g = g.to(device)
+                    output = model(g, g.ndata['x'])
+                    pred = output.max(dim=1)[1]
+                    eq_pred = pred.eq(labels.to(device))
+                    correct += eq_pred.sum().item()
+                    if epoch == EPOCHS_NUM - 1:
+                        for index,label in enumerate(labels.tolist()):
+                            test_acc_dic[label][0] = test_acc_dic[label][0] + eq_pred[index].item()
+                            test_acc_dic[label][1] = test_acc_dic[label][1] + 1
+                            test_acc_dic[label][2] = test_acc_dic[label][2] + int(pred[index] == 0)
+                            test_acc_dic[label][3] = test_acc_dic[label][3] + int(pred[index] == 1)
+                            test_acc_dic[label][4] = test_acc_dic[label][4] + int(pred[index] == 2)
+                            test_acc_dic[label][5] = test_acc_dic[label][5] + int(pred[index] == 3)
+                    total += len(labels.to(device))
+                test_acc = correct/total
 
-                    correct = 0
-                    total = 0
-                    for g, labels in testdataloader:
-                        g = g.to(device)
-                        output = model(g, g.ndata['x'])
-                        pred = output.max(dim=1)[1]
-                        eq_pred = pred.eq(labels.to(device))
-                        correct += eq_pred.sum().item()
-                        if epoch == EPOCHS_NUM - 1:
-                            for index,label in enumerate(labels.tolist()):
-                                test_acc_dic[label][0] = test_acc_dic[label][0] + eq_pred[index].item()
-                                test_acc_dic[label][1] = test_acc_dic[label][1] + 1
-                                test_acc_dic[label][2] = test_acc_dic[label][2] + int(pred[index] == 0)
-                                test_acc_dic[label][3] = test_acc_dic[label][3] + int(pred[index] == 1)
-                                test_acc_dic[label][4] = test_acc_dic[label][4] + int(pred[index] == 2)
-                                test_acc_dic[label][5] = test_acc_dic[label][5] + int(pred[index] == 3)
-                        total += len(labels.to(device))
-                    test_acc = correct/total
-
-                    pbar.set_postfix(train_loss=train_loss, train_acc = train_acc, test_acc = test_acc)
-                total_train_acc.append(train_acc)
-                total_test_acc.append(test_acc)
-            print(np.mean(total_train_acc))
-            print(np.mean(total_test_acc))
-            print(train_acc_dic, test_acc_dic)
-            result_dic[(m, layers)] = (np.mean(total_train_acc), np.mean(total_test_acc), train_acc_dic, test_acc_dic)
+                pbar.set_postfix(train_loss=train_loss, train_acc = train_acc, test_acc = test_acc)
+            total_train_acc.append(train_acc)
+            total_test_acc.append(test_acc)
+        print(np.mean(total_train_acc))
+        print(np.mean(total_test_acc))
+        print(train_acc_dic, test_acc_dic)
+        result_dic[(m, layers)] = (np.mean(total_train_acc), np.mean(total_test_acc), train_acc_dic, test_acc_dic)
     print(result_dic)
     record_exp(result_dic, int(exp_name))
 
