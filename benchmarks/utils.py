@@ -213,26 +213,55 @@ def k_hop_subgraph_dgl(g, nodeid, k):
     edges_with_origin_node_id = (torch.tensor(u),torch.tensor(v))
     return subgraph, subgraph.edata[dgl.EID], subgraph.ndata[dgl.NID], edges_with_origin_node_id, edges_bool_list
 
-def record_exp(result, exp_no, filepath = '/home/ubuntu/Maolin/eva_gnn/Exp.csv'):
-    collist = ['exp','m','layers','train_acc','test_acc']
-    for i in ['train_', 'test_']:
-        for j in range(4):
-            for k in ['_true','_total','_0','_1','_2','_3']:
-                collist.append(i+str(j)+k)
-
-    D = pd.read_csv(filepath)
-    i = exp_no
-    for j in [1,5]:
-        for k in [1,2,3,4]:
-            tmp = ['exp'+str(i),j,k]
-            tmp.append(result[(j,k)][0])
-            tmp.append(result[(j,k)][1])
-            for l in range(4):
-                for m in range(6):
-                    tmp.append(result[(j,k)][2][l][m])
-            for l in range(4):
-                for m in range(6):
-                    tmp.append(result[(j,k)][3][l][m])
-            tmp = pd.DataFrame([tmp],columns=collist)
-            D = D.append(tmp)
+def record_exp(result, exp_no, filepath = '/home/ubuntu/Maolin/eva_gnn/Exp.csv', mlist = [1,5], layerlist = [1,2,3,4]):
+    if len(result[(mlist[0],layerlist[0])]) == 4:
+        collist = ['exp','m','layers','train_acc','test_acc']
+        for i in ['train_', 'test_']:
+            for j in range(4):
+                for k in ['_true','_total','_0','_1','_2','_3']:
+                    collist.append(i+str(j)+k)
+        D = pd.read_csv(filepath)
+        i = exp_no
+        for j in mlist:
+            for k in layerlist:
+                tmp = ['exp'+str(i),j,k]
+                tmp.append(result[(j,k)][0])
+                tmp.append(result[(j,k)][1])
+                for l in range(4):
+                    for m in range(6):
+                        tmp.append(result[(j,k)][2][l][m])
+                for l in range(4):
+                    for m in range(6):
+                        tmp.append(result[(j,k)][3][l][m])
+                tmp = pd.DataFrame([tmp],columns=collist)
+                D = D.append(tmp)
+    elif len(result[(mlist[0],layerlist[0])]) == 6:
+        filepath = '/home/ubuntu/Maolin/eva_gnn/Exp2.csv'
+        collist = ['exp','m','layers','train_acc','test_acc','test2_acc']
+        for i in ['train_', 'test_', 'test2_']:
+            for j in range(4):
+                for k in ['_true','_total','_0','_1','_2','_3']:
+                    collist.append(i+str(j)+k)
+        try:
+            D = pd.read_csv(filepath)
+        except:
+            D = pd.DataFrame([],columns=collist)
+        i = exp_no
+        for j in mlist:
+            for k in layerlist:
+                tmp = ['exp'+str(i),j,k]
+                tmp.append(result[(j,k)][0])
+                tmp.append(result[(j,k)][1])
+                tmp.append(result[(j,k)][2])
+                for l in range(4):
+                    for m in range(6):
+                        tmp.append(result[(j,k)][3][l][m])
+                for l in range(4):
+                    for m in range(6):
+                        tmp.append(result[(j,k)][4][l][m])
+                for l in range(4):
+                    for m in range(6):
+                        tmp.append(result[(j,k)][5][l][m])
+                tmp = pd.DataFrame([tmp],columns=collist)
+                D = D.append(tmp)
     D.to_csv(filepath, index=False)

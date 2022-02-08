@@ -93,10 +93,11 @@ class Net1(torch.nn.Module):
 
         
 class Net2(torch.nn.Module):
-    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type):
+    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Mean'):
         super(Net2, self).__init__()
         dim = 32
         self.convs = torch.nn.ModuleList()
+        self.readout = readout 
         if conv_type == 'GraphConvWL':#'GCNConv':
             conv_class = GraphConvWL
             #kwargs = {'add_self_loops': False}
@@ -128,6 +129,9 @@ class Net2(torch.nn.Module):
         if self.concat_features:
             x = torch.cat(xs, dim=1)
         g.ndata['h'] = x
-        hg = dgl.mean_nodes(g, 'h')
+        if self.readout == 'Mean':
+            hg = dgl.mean_nodes(g, 'h')
+        elif self.readout == 'Max':
+            hg = dgl.max_nodes(g, 'h')
         hg = self.fc(hg)
         return F.log_softmax(hg, dim=1)

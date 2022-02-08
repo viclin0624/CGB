@@ -605,14 +605,21 @@ def run(exp_name: str = typer.Argument(..., help="Experiment to run"),
         dataloader = dgl.dataloading.GraphDataLoader(data, batch_size = BATCH_SIZE, shuffle = True)
         data2 = BA4labelDataset(graphs_num = GRAPH_NUM, m = None,nodes_num=NODES_NUM, perturb_dic = perturb_dic)
         testdataloader = dgl.dataloading.GraphDataLoader(data2, batch_size = BATCH_SIZE, shuffle = True)
-        
+        data3 = BA4labelDataset(graphs_num = GRAPH_NUM, m = 2,nodes_num=NODES_NUM, perturb_dic = perturb_dic)
+        testdataloader2 = dgl.dataloading.GraphDataLoader(data3, batch_size = BATCH_SIZE, shuffle = True)
+
         total_train_acc = []
         total_test_acc = []
+        total_test2_acc = []
+
         train_acc_dic = {}
         test_acc_dic = {}
+        test2_acc_dic = {}
+
         for i in range(4):
             train_acc_dic[i] = [0,0,0,0,0,0] #correct total 0 1 2 3
             test_acc_dic[i] = [0,0,0,0,0,0] #correct total 0 1 2 3
+            test2_acc_dic[i] = [0,0,0,0,0,0]
 
         for _ in tq(range(EXPS_NUM)):
             model = Net2(data.num_node_features, data.num_classes, layers, True,
@@ -676,13 +683,34 @@ def run(exp_name: str = typer.Argument(..., help="Experiment to run"),
                     total += len(labels.to(device))
                 test_acc = correct/total
 
-                pbar.set_postfix(train_loss=train_loss, train_acc = train_acc, test_acc = test_acc)
+                correct = 0
+                total = 0
+                for g, labels in testdataloader2:
+                    g = g.to(device)
+                    output = model(g, g.ndata['x'])
+                    pred = output.max(dim=1)[1]
+                    eq_pred = pred.eq(labels.to(device))
+                    correct += eq_pred.sum().item()
+                    if epoch == EPOCHS_NUM - 1:
+                        for index,label in enumerate(labels.tolist()):
+                            test2_acc_dic[label][0] = test2_acc_dic[label][0] + eq_pred[index].item()
+                            test2_acc_dic[label][1] = test2_acc_dic[label][1] + 1
+                            test2_acc_dic[label][2] = test2_acc_dic[label][2] + int(pred[index] == 0)
+                            test2_acc_dic[label][3] = test2_acc_dic[label][3] + int(pred[index] == 1)
+                            test2_acc_dic[label][4] = test2_acc_dic[label][4] + int(pred[index] == 2)
+                            test2_acc_dic[label][5] = test2_acc_dic[label][5] + int(pred[index] == 3)
+                    total += len(labels.to(device))
+                test2_acc = correct/total
+
+                pbar.set_postfix(train_loss=train_loss, train_acc = train_acc, test_acc = test_acc, test2_acc = test2_acc)
             total_train_acc.append(train_acc)
             total_test_acc.append(test_acc)
+            total_test2_acc.append(test2_acc)
         print(np.mean(total_train_acc))
         print(np.mean(total_test_acc))
-        print(train_acc_dic, test_acc_dic)
-        result_dic[(m, layers)] = (np.mean(total_train_acc), np.mean(total_test_acc), train_acc_dic, test_acc_dic)
+        print(np.mean(total_test2_acc))
+        print(train_acc_dic, test_acc_dic, test2_acc_dic)
+        result_dic[(m, layers)] = (np.mean(total_train_acc), np.mean(total_test_acc), np.mean(total_test2_acc), train_acc_dic, test_acc_dic, test2_acc_dic)
     print(result_dic)
     if m == None:
         record_exp(result_dic, int(exp_name), mlist = [None], layerlist = LAYERS_LIST)
