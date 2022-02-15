@@ -72,9 +72,9 @@ class GraphLayerGradCam(LayerGradCam):
         return _format_output(len(scaled_acts) > 1, scaled_acts)
 
 
-def model_forward(g, edge_mask, model, node_idx, x):
-    out = model(g, x, edge_mask)
-    return out[[node_idx]]
+def model_forward(x, g, edge_mask, model):#######
+    out = model(g, x, edge_mask)#####
+    return out
 
 
 def model_forward_node(g, model, x, node_idx):

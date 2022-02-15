@@ -242,5 +242,5 @@ def test_model_acc():
     print(test_acc)
     
 if __name__ == '__main__':
-    A = BA4label(1,1,True,'GraphConv')
+    A = BA4label(1,1,True,'GraphConvWL')
     A.run()
