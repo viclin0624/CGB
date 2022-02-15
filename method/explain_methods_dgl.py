@@ -117,7 +117,7 @@ def explain_gradXact(model, node_idx, x, edge_index, target, include_edges=None)
     return edge_mask
 
 
-def explain_distance(model, node_idx, x, edge_index, target, include_edges=None):
+def explain_distance(model, node_idx, x, edge_index, target, include_edges=None):#点分类问题使用
     data = Data(x=x, edge_index=edge_index)
     g = to_networkx(data)
     length = nx.shortest_path_length(g, target=node_idx)
@@ -131,7 +131,7 @@ def explain_distance(model, node_idx, x, edge_index, target, include_edges=None)
     return np.array([get_attr(node) for node in edge_sources])
 
 
-def explain_pagerank(model, node_idx, x, edge_index, target, include_edges=None):
+def explain_pagerank(model, node_idx, x, edge_index, target, include_edges=None):#点分类问题使用
     data = Data(x=x, edge_index=edge_index)
     g = to_networkx(data)
     pagerank = nx.pagerank(g, personalization={node_idx: 1})

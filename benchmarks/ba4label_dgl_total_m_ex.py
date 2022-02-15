@@ -1,4 +1,4 @@
-
+# 新增了测试集2，使用m=135进行随机化的训练，使用m=2作为模型测试的方法，但是删除了对M_LIST的循环
 from curses import start_color
 from pickletools import int4
 import random

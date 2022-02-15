@@ -1,4 +1,4 @@
-
+#未加入测试集2，只实现了随机化m的方法，同样失去了M_LIST的循环
 from curses import start_color
 from pickletools import int4
 import random
