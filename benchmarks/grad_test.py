@@ -12,7 +12,7 @@ from torch.nn import Sequential, Linear, ReLU
 #from torch_geometric.nn import GNNExplainer, GINConv, MessagePassing, GCNConv, GraphConv
 from dgl.nn import GraphConv#instead of GCNConv in PyG
 import dgl
-
+import numpy as np 
 from torch import nn
 class GraphConvWL(nn.Module):
     r'''
@@ -131,6 +131,96 @@ class FixedNet(nn.Module):
             else:
                 torch.nn.init.constant_(p, 0)
             k += 1
+class FixedNet2(nn.Module):
+    '''
+    Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
+    '''
+    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
+        super(FixedNet2, self).__init__()
+        dim = 1
+        self.report = report
+        self.convs = torch.nn.ModuleList()
+        if conv_type == 'GraphConvWL':#'GCNConv':
+            conv_class = GraphConvWL
+            #kwargs = {'add_self_loops': False}
+        elif conv_type == 'GraphConv':
+            conv_class = GraphConv
+            kwargs = {}
+        else:
+            raise RuntimeError(f"conv_type {conv_type} not supported")
+
+        self.convs.append(conv_class(num_node_features, dim, bias = True))#, **kwargs))
+        for i in range(num_layers - 1):
+            self.convs.append(conv_class(dim, dim, bias = True))#, **kwargs))
+        self.concat_features = concat_features
+
+        self.fc1 = Linear(1,8, bias = True)
+        self.output = Linear(8,4, bias = True)
+
+
+
+    def forward(self, g, x, edge_weight = None):
+        '''
+        g: DGL Graph
+        x: node feature
+        '''
+        xs = [x]
+        for conv in self.convs:
+            x = conv(g, x, edge_weight)
+            x = F.relu(x)
+            xs.append(x)
+        if self.concat_features:
+            x = torch.cat(xs, dim=1)
+        g.ndata['h'] = x
+        hg = dgl.sum_nodes(g, 'h')
+        hg2 = self.fc1(hg)
+        hg2 = F.sigmoid(hg2*1000)
+        output = self.output(hg2)
+        output = F.relu(output)
+        return F.softmax(output, dim = 1)
+    
+    def use_report(self):
+        self.report = True
+
+    def unuse_report(self):
+        self.report = False
+
+    def set_paramerters(self):
+        k = 0
+        for p in self.parameters():
+            if k == 0 or k == 2:
+                torch.nn.init.constant_(p, 1)
+            elif k == 3:
+                torch.nn.init.constant_(p, -1)
+            elif k == 5:
+                torch.nn.init.constant_(p, 3)
+            elif k == 1 or k == 4:
+                torch.nn.init.constant_(p, 0)
+            elif k == 6: #W in fc1
+                with torch.no_grad():
+                    temp = [1,-1]
+                    for _ in range(2):
+                        temp.extend(temp)
+                    temp = torch.tensor(temp,dtype = torch.float32)
+                    temp = temp.reshape((-1,1))
+                    self.fc1.weight = torch.nn.Parameter(temp)
+            elif k == 7: #Bias in fc1
+                with torch.no_grad():
+                    temp = torch.tensor([0.01,0.01, -19.99,20.01, -13.99,14.01, -7.99,8.01],dtype = torch.float32)
+                    self.fc1.bias = torch.nn.Parameter(temp)
+            elif k == 8: #W in fc2
+                with torch.no_grad():
+                    temp = torch.zeros((4,8),dtype = torch.float32)
+                    for i in range(4):
+                        temp[i,i*2] = 100
+                        temp[i,i*2+1] = 100 
+                    self.output.weight = torch.nn.Parameter(temp)
+            elif k == 9: #Bias in fc2
+                with torch.no_grad():
+                    temp = torch.ones(4,dtype = torch.float32) * -100
+                    self.output.bias = torch.nn.Parameter(temp)
+            k += 1
+
 def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
 seed = None, no_attach_init_nodes=False):
     '''
@@ -159,7 +249,6 @@ def model_forward(input_mask, g, model, x):
         for i in range(int(input_mask.shape[0]/g.num_edges())):
             out.append(model(g, x[(i*g.num_nodes()):((i+1)*g.num_nodes())], input_mask[(i*g.num_edges()):((i+1)*g.num_edges())]))
         out = torch.cat(out, dim = 0)
-        print(out.shape)
     else:
         out = model(g, x, input_mask)
     return out
@@ -167,13 +256,48 @@ def model_forward(input_mask, g, model, x):
 from captum.attr import IntegratedGradients
 
 
-model = FixedNet(1,4,2,False,'GraphConvWL')
+model = FixedNet2(1,4,2,False,'GraphConvWL')
 model.set_paramerters()
 model.to(device)
 ig = IntegratedGradients(model_forward)
 
 x = torch.ones((25,1)).to(device)
-input_mask = torch.ones(g.num_edges(),1).requires_grad_(True).to(device)
+input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
 #print(model(g, x, input_mask))
 attr = ig.attribute(input_mask, target=2, additional_forward_args = (g,model,x))
-attr = attr.detach().numpy()
+attr = attr.detach().cpu().numpy()
+
+
+#########Acc
+def get_accuracy(g, correct_ids, edge_mask):
+    '''
+    edge_index: 2 elements tuple, u and v
+    '''
+    if correct_ids == []:
+        if np.max(edge_mask)!=0 or np.all(np.mean(edge_mask) == edge_mask):
+            return 1
+        else:
+            return 0
+    else:
+        correct_count = 0
+        correct_edges = set()
+        for i in range(g.num_edges()):
+            u = g.edges()[0][i].item()
+            v = g.edges()[1][i].item()
+            if u in correct_ids or v in correct_ids:
+                correct_edges.add((u,v))
+                correct_edges.add((v,u))
+        print(np.argsort(-edge_mask))
+        for x in np.argsort(-edge_mask)[:len(correct_edges)]:
+            u = g.edges()[0][x].item()
+            v = g.edges()[1][x].item()
+            print(u,v)
+            if (u, v) in correct_edges:
+                correct_count += 1
+        return correct_count / len(correct_edges)
+
+print(get_accuracy(g, list(range(15,25)), np.random.uniform(size = g.num_edges())))
+print(attr)
+print(attr.flatten())
+print(get_accuracy(g, list(range(15,25)), attr.flatten()))
+print(g.edges())

@@ -15,7 +15,7 @@ from tqdm import tqdm as tq
 import mlflow
 from collections import defaultdict
 sys.path.append('..')
-from model.models_dgl import FixedNet
+from model.models_dgl import FixedNet2
 
 from build_graph import BA4labelDataset,build_graph
 from benchmark_dgl import Benchmark
@@ -171,7 +171,7 @@ class BA4label(Benchmark):
 
             train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = 1, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = 1, shuffle = True)
-            model = FixedNet(1, 4, 2, False, 'GraphConvWL').to(self.device)
+            model = FixedNet2(1, 4, 2, False, 'GraphConvWL').to(self.device)
             model.set_paramerters()
             train_acc, test_acc = self.train_and_test(model, train_dataloader, test_dataloader)
             if not self.is_trained_model_valid(test_acc):
@@ -240,7 +240,26 @@ def test_model_acc():
     print(output)
     test_acc = test_model_fixed(model_fixed, graphs_num = 1000, m = 6, nodes_num = 50, no_attach_init_nodes = True)
     print(test_acc)
-    
+
+def test_model_output_distribution(graph_class,graph_num):
+    model_fixed = FixedNet(1, 4, 2, False, 'GraphConvWL')
+    model_fixed.set_paramerters()
+    device = torch.device('cuda')
+    model_fixed = model_fixed.to(device)
+    model_fixed.unuse_report()
+    result = []
+    for i in range(graph_num):
+        G = generate_single_sample(graph_class, 0, nodes_num = 50, m = 6, perturb_dic = {}, no_attach_init_nodes = True)
+        G = dgl.from_networkx(G)
+        cut_index = np.random.choice(list(range(G.num_edges())))
+        G = dgl.remove_edges(G, cut_index)
+        G = G.to(device)
+        result.append(model_fixed(G, torch.ones((50,1)).to(device)))
+    print(result)
+    return result
+
+
 if __name__ == '__main__':
     A = BA4label(1,1,True,'GraphConvWL')
     A.run()
+    #test_model_output_distribution(3,20)

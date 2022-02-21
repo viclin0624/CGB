@@ -47,8 +47,8 @@ class GraphConvWL(nn.Module):
         self.conv_from_neigh.reset_parameters()
         self.conv_from_self.reset_parameters()
 
-    def forward(self, graph, feat):
-        neigh_feat = self.conv_from_neigh(graph, feat)
+    def forward(self, graph, feat, edge_weight = None):
+        neigh_feat = self.conv_from_neigh(graph, feat, edge_weight = edge_weight)
         self_feat = self.conv_from_self(feat)
         return neigh_feat+self_feat
 
@@ -179,7 +179,7 @@ class FixedNet(nn.Module):
         hg = dgl.sum_nodes(g, 'h')
         if self.report == True:
             return hg, xs
-        result = []
+        '''result = []
         for h in hg:
             if h == 0:
                 result.append([1,0,0,0])
@@ -189,7 +189,8 @@ class FixedNet(nn.Module):
                 result.append([0,0,1,0])
             else:
                 result.append([0,0,0,1])
-        return torch.tensor(result)
+        return torch.tensor(result)'''
+        return hg
     
     def use_report(self):
         self.report = True
@@ -208,4 +209,95 @@ class FixedNet(nn.Module):
                 torch.nn.init.constant_(p, 3)
             else:
                 torch.nn.init.constant_(p, 0)
+            k += 1
+
+
+class FixedNet2(nn.Module):
+    '''
+    Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
+    '''
+    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
+        super(FixedNet2, self).__init__()
+        dim = 1
+        self.report = report
+        self.convs = torch.nn.ModuleList()
+        if conv_type == 'GraphConvWL':#'GCNConv':
+            conv_class = GraphConvWL
+            #kwargs = {'add_self_loops': False}
+        elif conv_type == 'GraphConv':
+            conv_class = GraphConv
+            kwargs = {}
+        else:
+            raise RuntimeError(f"conv_type {conv_type} not supported")
+
+        self.convs.append(conv_class(num_node_features, dim, bias = True))#, **kwargs))
+        for i in range(num_layers - 1):
+            self.convs.append(conv_class(dim, dim, bias = True))#, **kwargs))
+        self.concat_features = concat_features
+
+        self.fc1 = Linear(1,8, bias = True)
+        self.output = Linear(8,4, bias = True)
+
+
+
+    def forward(self, g, x, edge_weight = None):
+        '''
+        g: DGL Graph
+        x: node feature
+        '''
+        xs = [x]
+        for conv in self.convs:
+            x = conv(g, x, edge_weight)
+            x = F.relu(x)
+            xs.append(x)
+        if self.concat_features:
+            x = torch.cat(xs, dim=1)
+        g.ndata['h'] = x
+        hg = dgl.sum_nodes(g, 'h')
+        hg2 = self.fc1(hg)
+        hg2 = F.sigmoid(hg2*1000)
+        output = self.output(hg2)
+        output = F.relu(output)
+        return F.softmax(output, dim = 1)
+    
+    def use_report(self):
+        self.report = True
+
+    def unuse_report(self):
+        self.report = False
+
+    def set_paramerters(self):
+        k = 0
+        for p in self.parameters():
+            if k == 0 or k == 2:
+                torch.nn.init.constant_(p, 1)
+            elif k == 3:
+                torch.nn.init.constant_(p, -1)
+            elif k == 5:
+                torch.nn.init.constant_(p, 3)
+            elif k == 1 or k == 4:
+                torch.nn.init.constant_(p, 0)
+            elif k == 6: #W in fc1
+                with torch.no_grad():
+                    temp = [1,-1]
+                    for _ in range(2):
+                        temp.extend(temp)
+                    temp = torch.tensor(temp,dtype = torch.float32)
+                    temp = temp.reshape((-1,1))
+                    self.fc1.weight = torch.nn.Parameter(temp)
+            elif k == 7: #Bias in fc1
+                with torch.no_grad():
+                    temp = torch.tensor([0.01,0.01, -19.99,20.01, -13.99,14.01, -7.99,8.01],dtype = torch.float32)
+                    self.fc1.bias = torch.nn.Parameter(temp)
+            elif k == 8: #W in fc2
+                with torch.no_grad():
+                    temp = torch.zeros((4,8),dtype = torch.float32)
+                    for i in range(4):
+                        temp[i,i*2] = 100
+                        temp[i,i*2+1] = 100 
+                    self.output.weight = torch.nn.Parameter(temp)
+            elif k == 9: #Bias in fc2
+                with torch.no_grad():
+                    temp = torch.ones(4,dtype = torch.float32) * -100
+                    self.output.bias = torch.nn.Parameter(temp)
             k += 1
