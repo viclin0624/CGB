@@ -5,6 +5,7 @@ from torch.nn import Sequential, Linear, ReLU
 #from torch_geometric.nn import GNNExplainer, GINConv, MessagePassing, GCNConv, GraphConv
 from dgl.nn import GraphConv#instead of GCNConv in PyG
 import dgl
+import numpy as np
 
 from torch import nn
 class GraphConvWL(nn.Module):
@@ -300,4 +301,17 @@ class FixedNet2(nn.Module):
                 with torch.no_grad():
                     temp = torch.ones(4,dtype = torch.float32) * -100
                     self.output.bias = torch.nn.Parameter(temp)
+            k += 1
+
+    def set_random_gnn_parameters(self, low = -0.0001, high = 0.0001):
+        k = 0
+        for p in self.parameters():
+            if k == 0 or k == 2:
+                torch.nn.init.constant_(p, p[0].item()+np.random.uniform(low,high))
+            elif k == 3:
+                torch.nn.init.constant_(p, p.item()+np.random.uniform(low,high))
+            elif k == 5:
+                torch.nn.init.constant_(p, p.item()+np.random.uniform(low,high))
+            elif k == 1 or k == 4:
+                torch.nn.init.constant_(p, p.item()+np.random.uniform(low,high))
             k += 1
