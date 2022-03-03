@@ -19,7 +19,7 @@ from model.models_dgl import FixedNet2
 
 from build_graph import BA4labelDataset,build_graph
 from benchmark_dgl import Benchmark
-from method.explain_methods_dgl import explain_random
+from method.explain_methods_dgl import explain_random, explain_ig, explain_sa
 
 def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
     seed = None, no_attach_init_nodes=False):
@@ -117,10 +117,10 @@ class BA4label(Benchmark):
     def evaluate_explanation(self, explain_function, model, test_dataset, explain_name):
         accs = []
         tested_graphs = 0
-        for g, label in test_dataset:
+        for g, label in tq(test_dataset):
             g = g.to(self.device)
             tested_graphs += 1
-            edge_mask = explain_function(model, 'graph', g.ndata['x'], g.edges(), label)
+            edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
             if label == 0:
                 correct_ids = []
             else:
@@ -135,6 +135,7 @@ class BA4label(Benchmark):
         loss_all = 0
         for g, label in train_loader:
             g = g.to(self.device)
+            label = label.to(self.device)
             output = model(g, g.ndata['x'])
             loss = F.nll_loss(output.float(), label)
             loss_all += loss.item()
@@ -147,6 +148,7 @@ class BA4label(Benchmark):
         total = 0
         for g, label in loader:
             g = g.to(self.device)
+            label = label.to(self.device)
             output = model(g, g.ndata['x'])
             pred = output.max(dim=1)[1]
             correct += pred.eq(label).sum().item()
@@ -173,6 +175,7 @@ class BA4label(Benchmark):
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = 1, shuffle = True)
             model = FixedNet2(1, 4, 2, False, 'GraphConvWL').to(self.device)
             model.set_paramerters()
+            model.to(self.device)
             train_acc, test_acc = self.train_and_test(model, train_dataloader, test_dataloader)
             if not self.is_trained_model_valid(test_acc):
                 print('Model accuracy was not valid, ignoring this experiment')

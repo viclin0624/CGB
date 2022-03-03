@@ -31,8 +31,8 @@ class Benchmark(object):
     TEST_RATIO = 0.5
     PGMEXPLAINER_SUBSAMPLE_PER_GRAPH = 20
     METHODS = [#'pagerank', 'pgmexplainer', 'occlusion', 'distance', 'gradXact', 
-    'random'#, 'sa_node',
-               #'ig_node', 'sa', 'ig', 'gnnexplainer',
+    'sa','random', 'ig'#, 'sa_node',
+               #'ig_node', 'sa', 'gnnexplainer',
                #'subgraphx'
                ]
     LR = 0.0003

@@ -239,7 +239,7 @@ seed = None, no_attach_init_nodes=False):
             list_shapes = list_shapes + [[perturb_dic[perturb_type]]]
         G, role_id, plug_id = build_graph(nodes_num-10-perturb_type, basis_type, list_shapes, start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
     return G
-G = generate_single_sample(0, 0, nodes_num = 25, m = 6, perturb_dic = {4:'square_diagonal'}, seed = 0, no_attach_init_nodes = True)
+G = generate_single_sample(3, 0, nodes_num = 25, m = 6, perturb_dic = {4:'square_diagonal'}, seed = 0, no_attach_init_nodes = True)
 g = dgl.from_networkx(G)
 g = g.to(device)
 
@@ -264,7 +264,7 @@ ig = IntegratedGradients(model_forward)
 x = torch.ones((25,1)).to(device)
 input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
 #print(model(g, x, input_mask))
-attr,delta = ig.attribute(input_mask, target=0, additional_forward_args = (g,model,x),return_convergence_delta=True, n_steps=500)#IG忽略了边之间的互相影响每次会给所有边相同的weight
+attr,delta = ig.attribute(input_mask, target=3, additional_forward_args = (g,model,x),return_convergence_delta=True, n_steps=500)#IG忽略了边之间的互相影响每次会给所有边相同的weight
 attr = attr.detach().cpu().numpy()
 
 

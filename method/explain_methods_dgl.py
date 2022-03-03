@@ -72,8 +72,14 @@ class GraphLayerGradCam(LayerGradCam):
         return _format_output(len(scaled_acts) > 1, scaled_acts)
 
 
-def model_forward(x, g, edge_mask, model):#######
-    out = model(g, x, edge_mask)#####
+def model_forward(input_mask, g, model, x):
+    if input_mask.shape[0] != g.num_edges():
+        out = []
+        for i in range(int(input_mask.shape[0]/g.num_edges())):
+            out.append(model(g, x[(i*g.num_nodes()):((i+1)*g.num_nodes())], input_mask[(i*g.num_edges()):((i+1)*g.num_edges())]))
+        out = torch.cat(out, dim = 0)
+    else:
+        out = model(g, x, input_mask)
     return out
 
 
@@ -97,8 +103,8 @@ def get_all_convolution_layers(model):
     return layers
 
 
-def explain_random(model, node_idx, x, edge_index, target, include_edges=None):
-    return np.random.uniform(size=len(edge_index[0]))
+def explain_random(model, task_type, g, x, target):
+    return np.random.uniform(size=g.num_edges())
 
 
 def explain_gradXact(model, node_idx, x, edge_index, target, include_edges=None):
@@ -117,72 +123,21 @@ def explain_gradXact(model, node_idx, x, edge_index, target, include_edges=None)
     return edge_mask
 
 
-def explain_distance(model, node_idx, x, edge_index, target, include_edges=None):#点分类问题使用
-    data = Data(x=x, edge_index=edge_index)
-    g = to_networkx(data)
-    length = nx.shortest_path_length(g, target=node_idx)
 
-    def get_attr(node):
-        if node in length:
-            return 1 / (length[node] + 1)
-        return 0
-
-    edge_sources = edge_index[1].cpu().numpy()
-    return np.array([get_attr(node) for node in edge_sources])
-
-
-def explain_pagerank(model, node_idx, x, edge_index, target, include_edges=None):#点分类问题使用
-    data = Data(x=x, edge_index=edge_index)
-    g = to_networkx(data)
-    pagerank = nx.pagerank(g, personalization={node_idx: 1})
-
-    node_attr = np.zeros(x.shape[0])
-    for node, value in pagerank.items():
-        node_attr[node] = value
-    edge_mask = node_attr_to_edge(edge_index, node_attr)
-    return edge_mask
-
-
-def explain_sa_node(model, node_idx, x, edge_index, target, include_edges=None):
-    saliency = Saliency(model_forward_node)
-    input_mask = x.clone().requires_grad_(True).to(device)
-    saliency_mask = saliency.attribute(input_mask, target=target, additional_forward_args=(model, edge_index, node_idx),
-                                       abs=False)
-
-    node_attr = saliency_mask.cpu().numpy().sum(axis=1)
-    edge_mask = node_attr_to_edge(edge_index, node_attr)
-    return edge_mask
-
-
-def explain_sa(model, node_idx, x, edge_index, target, include_edges=None):
+def explain_sa(model, task_type, g, x, target):
     saliency = Saliency(model_forward)
-    input_mask = torch.ones(edge_index.shape[1]).requires_grad_(True).to(device)
-    saliency_mask = saliency.attribute(input_mask, target=target,
-                                       additional_forward_args=(model, node_idx, x, edge_index), abs=False)
-
-    edge_mask = saliency_mask.cpu().numpy()
-    return edge_mask
+    input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
+    attr = saliency.attribute(input_mask, target=int(target), additional_forward_args = (g,model,x), abs = False)#IG忽略了边之间的互相影响每次会给所有边相同的weight
+    attr = attr.detach().cpu().numpy()
+    return attr
 
 
-def explain_ig_node(model, node_idx, x, edge_index, target, include_edges=None):
-    ig = IntegratedGradients(model_forward_node)
-    input_mask = x.clone().requires_grad_(True).to(device)
-    ig_mask = ig.attribute(input_mask, target=target, additional_forward_args=(model, edge_index, node_idx),
-                           internal_batch_size=input_mask.shape[0])
-
-    node_attr = ig_mask.cpu().detach().numpy().sum(axis=1)
-    edge_mask = node_attr_to_edge(edge_index, node_attr)
-    return edge_mask
-
-
-def explain_ig(model, node_idx, x, edge_index, target, include_edges=None):
+def explain_ig(model, task_type, g, x, target):
     ig = IntegratedGradients(model_forward)
-    input_mask = torch.ones(edge_index.shape[1]).requires_grad_(True).to(device)
-    ig_mask = ig.attribute(input_mask, target=target, additional_forward_args=(model, node_idx, x, edge_index),
-                           internal_batch_size=edge_index.shape[1])
-
-    edge_mask = ig_mask.cpu().detach().numpy()
-    return edge_mask
+    input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
+    attr,delta = ig.attribute(input_mask, target=int(target), additional_forward_args = (g,model,x),return_convergence_delta=True, n_steps=500)#IG忽略了边之间的互相影响每次会给所有边相同的weight
+    attr = attr.detach().cpu().numpy()
+    return attr
 
 
 def explain_occlusion(model, node_idx, x, edge_index, target, include_edges=None):
