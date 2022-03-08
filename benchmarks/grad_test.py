@@ -14,6 +14,8 @@ from dgl.nn import GraphConv#instead of GCNConv in PyG
 import dgl
 import numpy as np 
 from torch import nn
+sys.path.append('..')
+from method.NodeExplainerModule import NodeExplainerModule
 class GraphConvWL(nn.Module):
     r'''
     Description
@@ -253,7 +255,7 @@ def model_forward(input_mask, g, model, x):
         out = model(g, x, input_mask)
     return out
 
-from captum.attr import IntegratedGradients
+'''from captum.attr import IntegratedGradients
 
 
 model = FixedNet2(1,4,2,False,'GraphConvWL')
@@ -265,9 +267,54 @@ x = torch.ones((25,1)).to(device)
 input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
 #print(model(g, x, input_mask))
 attr,delta = ig.attribute(input_mask, target=3, additional_forward_args = (g,model,x),return_convergence_delta=True, n_steps=500)#IG忽略了边之间的互相影响每次会给所有边相同的weight
-attr = attr.detach().cpu().numpy()
+attr = attr.detach().cpu().numpy()'''
+def explain_gnnexplainer(model, task_type, g, x, target):
+    # load graph, feat, and label
+    labels = target
+    feats = x
+    dummy_model = model
+    num_classes = 4
+    feat_dim = feats.shape[1]
+    lr = 0.01
+    wd = 0
+    epochs = 200
 
+    # create an explainer
+    explainer = NodeExplainerModule(model=model,
+                                    num_edges=g.number_of_edges(),
+                                    node_feat_dim=feat_dim)
 
+    # define optimizer
+    optim = torch.optim.Adam(explainer.parameters(), lr=lr, weight_decay=wd)
+
+    # train the explainer for the given node
+    dummy_model.eval()
+    model_logits = dummy_model(g, x)
+    model_predict = F.one_hot(torch.argmax(model_logits, dim=-1), num_classes)
+
+    for epoch in range(epochs):
+        explainer.train()
+        exp_logits = explainer(g, x)
+        loss = explainer._loss(exp_logits, model_predict)
+
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+    edge_weights = explainer.edge_mask.sigmoid().detach()
+    
+    return edge_weights.cpu().numpy()
+
+from method.gnn_explainer import GNNExplainer
+model = FixedNet2(1,4,2,False,'GraphConvWL')
+model.set_paramerters()
+model.to(device)
+x = torch.ones((25,1)).to(device)
+
+explainer = GNNExplainer(model, num_hops=2)
+feat_mask, attr = explainer.explain_graph(g, x)
+attr = attr.cpu().numpy()
+#attr = explain_gnnexplainer(model, 'graph', g, x, 3)
+#print(attr)
 #########Acc
 def get_accuracy(g, correct_ids, edge_mask):
     '''

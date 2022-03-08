@@ -19,7 +19,6 @@ import torch
 import sys
 sys.path.append("..")
 from model.models_dgl import Net1
-from method.explain_methods_dgl import explain_random
 
 class Benchmark(object):
     '''
@@ -31,7 +30,7 @@ class Benchmark(object):
     TEST_RATIO = 0.5
     PGMEXPLAINER_SUBSAMPLE_PER_GRAPH = 20
     METHODS = [#'pagerank', 'pgmexplainer', 'occlusion', 'distance', 'gradXact', 
-    'sa','random', 'ig'#, 'sa_node',
+    'pgmexplainer','gnnexplainer','sa','random', 'ig'#, 'sa_node',
                #'ig_node', 'sa', 'gnnexplainer',
                #'subgraphx'
                ]

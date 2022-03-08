@@ -1,4 +1,5 @@
 from typing import Union, Tuple, Any
+from scipy.special import softmax
 
 import networkx as nx
 import numpy as np
@@ -19,6 +20,10 @@ from captum.attr import Saliency, IntegratedGradients, LayerGradCam
 from torch import Tensor
 #from torch_geometric.data import Data
 import dgl
+from method.NodeExplainerModule import NodeExplainerModule
+from method.gnn_explainer import GNNExplainer
+import method.pgm_explainer as pe
+from torch.utils.data import DataLoader
 #from torch_geometric.nn import MessagePassing
 #from torch_geometric.utils import to_networkx
 
@@ -88,10 +93,10 @@ def model_forward_node(g, model, x, node_idx):
     return out[[node_idx]]
 
 
-def node_attr_to_edge(edge_index, node_mask):
-    edge_mask = np.zeros(edge_index.shape[1])
-    edge_mask += node_mask[edge_index[0].cpu().numpy()]
-    edge_mask += node_mask[edge_index[1].cpu().numpy()]
+def node_attr_to_edge(g, node_mask):
+    edge_mask = np.zeros(g.num_edges())
+    edge_mask += node_mask[g.edges()[0].cpu().numpy()]
+    edge_mask += node_mask[g.edges()[1].cpu().numpy()]
     return edge_mask
 
 
@@ -102,6 +107,21 @@ def get_all_convolution_layers(model):
             layers.append(module)
     return layers
 
+def collate(self, samples):
+    # The input samples is a list of pairs (graph, label).
+    graphs, labels = map(list, zip(*samples))
+    labels = torch.tensor(np.array(labels))
+    tab_sizes_n = [ graphs[i].number_of_nodes() for i in range(len(graphs))]
+    tab_snorm_n = [ torch.FloatTensor(size,1).fill_(1./float(size)) for size in tab_sizes_n ]
+    snorm_n = torch.cat(tab_snorm_n).sqrt()  
+    tab_sizes_e = [ graphs[i].number_of_edges() for i in range(len(graphs))]
+    tab_snorm_e = [ torch.FloatTensor(size,1).fill_(1./float(size)) for size in tab_sizes_e ]
+    snorm_e = torch.cat(tab_snorm_e).sqrt()
+    for idx, graph in enumerate(graphs):
+        graphs[idx].ndata['feat'] = graph.ndata['feat'].float()
+        graphs[idx].edata['feat'] = graph.edata['feat'].float()
+    batched_graph = dgl.batch(graphs)
+    return batched_graph, labels, snorm_n, snorm_e
 
 def explain_random(model, task_type, g, x, target):
     return np.random.uniform(size=g.num_edges())
@@ -197,21 +217,65 @@ def explain_occlusion_undirected(model, node_idx, x, edge_index, target, include
     return edge_mask
 
 
-def explain_gnnexplainer(model, node_idx, x, edge_index, target, include_edges=None):
-    explainer = TargetedGNNExplainer(model, epochs=200, log=False)
-    node_feat_mask, edge_mask = explainer.explain_node_with_target(node_idx, x, edge_index, target_class=target)
-    return edge_mask.cpu().numpy()
+def explain_gnnexplainer(model, task_type, g, x, target):
+    '''# load graph, feat, and label
+    labels = target
+    feats = x
+    dummy_model = model
+    num_classes = 4
+    feat_dim = feats.shape[1]
+    lr = 0.01
+    wd = 0
+    epochs = 200
 
+    # create an explainer
+    explainer = NodeExplainerModule(model=model,
+                                    num_edges=g.number_of_edges(),
+                                    node_feat_dim=feat_dim)
 
-def explain_pgmexplainer(model, node_idx, x, edge_index, target, include_edges=None):
-    explainer = Node_Explainer(model, edge_index, x, len(model.convs), print_result=0)
-    explanation = explainer.explain(node_idx,target)
+    # define optimizer
+    optim = torch.optim.Adam(explainer.parameters(), lr=lr, weight_decay=wd)
+
+    # train the explainer for the given node
+    dummy_model.eval()
+    model_logits = dummy_model(g, x)
+    model_predict = F.one_hot(torch.argmax(model_logits, dim=-1), num_classes)
+
+    for epoch in range(epochs):
+        explainer.train()
+        exp_logits = explainer(g, x)
+        loss = explainer._loss(exp_logits, model_predict)
+
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+    edge_weights = explainer.edge_mask.sigmoid().detach()
+    '''
+
+    explainer = GNNExplainer(model, num_hops=2, log = False)
+    feat_mask, edge_weights = explainer.explain_graph(g, x)
+    return edge_weights.cpu().numpy()
+
+def explain_pgmexplainer(model, task_type, g, x, target, include_edges=None):
+    #test_loader = DataLoader(g, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate)
+    #for iter, (graph, label, snorm_n, snorm_e) in enumerate(test_loader):
+    pred = model.forward(g, x).cpu()
+    soft_pred = np.asarray(softmax(np.asarray(pred[0].data)))
+    pred_threshold = 0.1*np.max(soft_pred)
+    e = pe.Graph_Explainer(model, g,
+                            perturb_feature_list = [0],
+                            perturb_mode = "mean",
+                            perturb_indicator = "diff")
+    pgm_nodes, p_values, candidates = e.explain(num_samples = 1000, percentage = 10, 
+                            top_node = 4, p_threshold = 0.05, pred_threshold = pred_threshold)
+    label = np.argmax(soft_pred)
+    pgm_nodes_filter = [i for i in pgm_nodes if p_values[i] < 0.02]
+    explanation = zip(pgm_nodes,p_values)
     node_attr = np.zeros(x.shape[0])
-    for node, p_value in explanation.items():
+    for node, p_value in explanation:
         node_attr[node] = 1 - p_value
-    edge_mask = node_attr_to_edge(edge_index, node_attr)
+    edge_mask = node_attr_to_edge(g, node_attr)
     return edge_mask
-
 
 def explain_subgraphx(model, node_idx, x, edge_index, target, include_edges=None):
     if int(model.fc.out_features) == 6:

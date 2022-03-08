@@ -19,7 +19,7 @@ from model.models_dgl import FixedNet2
 
 from build_graph import BA4labelDataset,build_graph
 from benchmark_dgl import Benchmark
-from method.explain_methods_dgl import explain_random, explain_ig, explain_sa
+from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
 
 def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
     seed = None, no_attach_init_nodes=False):
