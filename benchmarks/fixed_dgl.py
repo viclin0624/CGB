@@ -92,7 +92,7 @@ class BA4label(Benchmark):
                     continue
             #按照单向边来计算
             correct_count = 0
-            for x in np.argsort(edge_mask)[:len(correct_edges)]:
+            for x in np.argsort(-edge_mask)[:len(correct_edges)]:
                 u = g.edges()[0][x].item()
                 v = g.edges()[1][x].item()
                 if (u, v) in correct_edges:
