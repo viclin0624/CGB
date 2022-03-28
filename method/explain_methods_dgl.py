@@ -267,7 +267,7 @@ def explain_pgmexplainer(model, task_type, g, x, target, include_edges=None):
                             perturb_mode = "mean",
                             perturb_indicator = "diff")
     pgm_nodes, p_values, candidates = e.explain(num_samples = 1000, percentage = 10, 
-                            top_node = 4, p_threshold = 0.05, pred_threshold = pred_threshold)
+                            top_node = 5, p_threshold = 0.05, pred_threshold = pred_threshold)
     label = np.argmax(soft_pred)
     pgm_nodes_filter = [i for i in pgm_nodes if p_values[i] < 0.02]
     explanation = zip(pgm_nodes,p_values)

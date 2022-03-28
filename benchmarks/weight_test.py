@@ -32,21 +32,26 @@ def run(graphs_num: int = typer.Argument(..., help = 'Graph nums'),
     label: int = typer.Argument(..., help = 'Not class 0'), 
     nodes_num: int = typer.Argument(..., help = 'Nodes num'), 
     device: str = typer.Argument(...,help = 'cuda:x'),
+    #low_bound: list = typer.Argument(..., help = '0-1'),
     grid_num: int = typer.Argument(100, help = 'random choice from which granularity. Example: 100 means step is 0.01')):
     GRAPHS_NUM = graphs_num
     LABEL = label
     NODES_NUM = nodes_num
+    low_bound = [0.1 * i for i in range(10)]
     device = torch.device(device)
     fixed_model = FixedNet2(1,4,2,False,'GraphConvWL')
     fixed_model.set_paramerters()
     fixed_model.to(device)
-    result = []
-    for _ in tqdm(range(GRAPHS_NUM)):
-        G = generate_single_sample(LABEL, 0, nodes_num = NODES_NUM, m = 6, perturb_dic = {4:'square_diagonal'}, no_attach_init_nodes = True)
-        g = dgl.from_networkx(G)
-        g = g.to(device)
-        x = torch.ones((25,1)).to(device)
-        if LABEL!=0:
+    
+    pro_result = []
+    for l in low_bound:
+        result = []
+        for _ in tqdm(range(GRAPHS_NUM)):
+            G = generate_single_sample(LABEL, 0, nodes_num = NODES_NUM, m = 5, perturb_dic = {4:'square_diagonal'}, no_attach_init_nodes = True)
+            g = dgl.from_networkx(G)
+            g = g.to(device)
+            x = torch.ones((NODES_NUM,1)).to(device)
+            
             motif_mask = [False for _ in range(g.num_edges())]
             correct_ids = list(range(NODES_NUM-10, NODES_NUM))
             for i in range(g.num_edges()):
@@ -54,13 +59,18 @@ def run(graphs_num: int = typer.Argument(..., help = 'Graph nums'),
                 v = g.edges()[1][i].item()
                 if u in correct_ids or v in correct_ids:
                     motif_mask[i] = True
-        else:
-            print('Label should not be 0.')
-            break
-        input_mask = torch.tensor(np.random.choice(np.arange(0,1,grid_num), size = g.num_edges(), replace=True), dtype = torch.float32).to(device)
-        input_mask[motif_mask] = 1.0
-        result.append(np.argmax(fixed_model(g,x,input_mask).cpu().detach().numpy()))
-    print(Counter(result))
+            if LABEL!=0:
+                input_mask = torch.tensor(np.random.choice(np.arange(l,1,grid_num), size = g.num_edges(), replace=True), dtype = torch.float32).to(device)
+                input_mask[motif_mask] = 1.0
+                result.append(np.argmax(fixed_model(g,x,input_mask).cpu().detach().numpy()))
+            else:
+                input_mask = torch.tensor(np.random.choice(np.arange(l,1,grid_num), size = g.num_edges(), replace=True), dtype = torch.float32).to(device)
+                input_mask[motif_mask] = 1.0
+                result.append(np.max(fixed_model(g,x,input_mask).cpu().detach().numpy()))
+        counter = Counter(result)
+        print(counter)
+        pro_result.append(counter[LABEL]/GRAPHS_NUM)
+    print(pro_result)
 
 if __name__ == '__main__':
     typer.run(run)

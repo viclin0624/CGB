@@ -256,7 +256,7 @@ class FixedNet2(nn.Module):
         g.ndata['h'] = x
         hg = dgl.sum_nodes(g, 'h')
         hg2 = self.fc1(hg)
-        hg2 = F.sigmoid(hg2*1000)
+        hg2 = torch.sigmoid(hg2*1000)
         output = self.output(hg2)
         output = F.relu(output)
         return F.softmax(output, dim = 1)

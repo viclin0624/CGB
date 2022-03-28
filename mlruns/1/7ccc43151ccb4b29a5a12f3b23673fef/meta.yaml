@@ -1,0 +1,15 @@
+artifact_uri: file:///home/ubuntu/Maolin/eva_gnn/dgl-gnn-exp/mlruns/1/7ccc43151ccb4b29a5a12f3b23673fef/artifacts
+end_time: 1646808374153
+entry_point_name: ''
+experiment_id: '1'
+lifecycle_stage: active
+name: ''
+run_id: 7ccc43151ccb4b29a5a12f3b23673fef
+run_uuid: 7ccc43151ccb4b29a5a12f3b23673fef
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1646805205452
+status: 3
+tags: []
+user_id: ubuntu

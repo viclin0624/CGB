@@ -30,7 +30,11 @@ class Benchmark(object):
     TEST_RATIO = 0.5
     PGMEXPLAINER_SUBSAMPLE_PER_GRAPH = 20
     METHODS = [#'pagerank', 'pgmexplainer', 'occlusion', 'distance', 'gradXact', 
-    'pgmexplainer','gnnexplainer','sa','random', 'ig'#, 'sa_node',
+    #'pgmexplainer'
+    'gnnexplainer'
+    #'sa'
+    #'random', 
+    #'ig'#, 'sa_node',
                #'ig_node', 'sa', 'gnnexplainer',
                #'subgraphx'
                ]
@@ -53,7 +57,7 @@ class Benchmark(object):
         self.conv_type = conv_type
         mlflow.log_params(arguments)
         mlflow.log_param('PGMEXPLAINER_SUBSAMPLE_PER_GRAPH', self.PGMEXPLAINER_SUBSAMPLE_PER_GRAPH)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
     def create_dataset(self):
         raise NotImplementedError

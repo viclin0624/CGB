@@ -125,7 +125,7 @@ class Graph_Explainer:
         if top_node == None:
             top_node = int(num_nodes/20)
         
-#         Round 1
+        #Round 1
         Samples = self.batch_perturb_features_on_node(int(num_samples/2), range(num_nodes),percentage, 
                                                             p_threshold, pred_threshold)         
         
@@ -143,7 +143,7 @@ class Graph_Explainer:
         number_candidates = int(top_node*4)
         candidate_nodes = np.argpartition(p_values, number_candidates)[0:number_candidates]
         
-#         Round 2
+        #Round 2
         Samples = self.batch_perturb_features_on_node(num_samples, candidate_nodes, percentage, 
                                                             p_threshold, pred_threshold)          
         data = pd.DataFrame(Samples)
@@ -164,7 +164,11 @@ class Graph_Explainer:
         pgm_nodes = list(ind_top_p)
         
         return pgm_nodes, p_values, candidate_nodes
-'''import numpy as np
+'''
+
+Node classification
+
+import numpy as np
 import pandas as pd
 import torch
 from pgmpy.estimators.CITests import chi_square

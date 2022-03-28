@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import time
+from matplotlib.collections import Collection
 
 import networkx as nx
 import torch
@@ -16,9 +17,9 @@ import mlflow
 from collections import defaultdict
 sys.path.append('..')
 from model.models_dgl import FixedNet2
-
-from build_graph import BA4labelDataset,build_graph
-from benchmark_dgl import Benchmark
+from collections import Counter
+from benchmarks.build_graph import BA4labelDataset,build_graph
+from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
 
 def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
@@ -63,7 +64,8 @@ class BA4label(Benchmark):
     NUM_NODES = 50
     TEST_RATIO = 0.4
     LR = 0.005
-    M = 6
+    M = 5
+    print(NUM_NODES,M)
     NO_ATTACH_INIT_NODES = True
 
     @staticmethod
@@ -81,12 +83,16 @@ class BA4label(Benchmark):
             for i in range(g.num_edges()):
                 u = g.edges()[0][i].item()
                 v = g.edges()[1][i].item()
-                if u in correct_ids or v in correct_ids: #每个双向边都计入，是否要将边缘的边改为只计入一遍？
+                if u in correct_ids and v in correct_ids: #每个双向边都计入，是否要将边缘的边改为只计入一遍？
                     correct_edges.add((u,v))
                     correct_edges.add((v,u))
+                elif v in correct_ids:
+                    correct_edges.add((u,v))
+                else:
+                    continue
             #按照单向边来计算
             correct_count = 0
-            for x in np.argsort(-edge_mask)[:len(correct_edges)]:
+            for x in np.argsort(edge_mask)[:len(correct_edges)]:
                 u = g.edges()[0][x].item()
                 v = g.edges()[1][x].item()
                 if (u, v) in correct_edges:
@@ -114,13 +120,40 @@ class BA4label(Benchmark):
     def is_trained_model_valid(self, test_acc):
         return test_acc == 1
 
-    def evaluate_explanation(self, explain_function, model, test_dataset, explain_name):
+    def evaluate_explanation(self, explain_function, model, test_dataset, explain_name, iteration = 1, summarytype = 'sum'):
         accs = []
         tested_graphs = 0
         for g, label in tq(test_dataset):
             g = g.to(self.device)
             tested_graphs += 1
             edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
+            if iteration != 1:
+                if summarytype == 'sum':
+                    for _ in range(1, iteration):
+                        edge_mask += explain_function(model, 'graph', g, g.ndata['x'], label)
+                if summarytype == 'count':
+                    top_edges_index = list(np.argsort(-edge_mask)[:30])
+                    for _ in range(1, iteration):
+                        edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
+                        top_edges_index.extend(list(np.argsort(-edge_mask)[:30]))
+                    edges_index_dic = Counter(top_edges_index)
+                    edge_mask = np.zeros(g.num_edges())
+                    for k,v in edges_index_dic.items():
+                        edge_mask[k] = -v #large v means small mask
+                if summarytype == 'rank':
+                    edges_index = np.argsort(-edge_mask)
+                    edges_rank = {}
+                    for i in range(len(edges_index)):
+                        edges_rank[edges_index[i]] = i
+                    for _ in range(1, iteration):
+                        edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
+                        edges_index = np.argsort(-edge_mask)
+                        for i in range(len(edges_index)):
+                            edges_rank[edges_index[i]] += i
+                    edge_mask = []
+                    for i in range(g.num_edges()):
+                        edge_mask.append(edges_rank[i])
+                    edge_mask = -np.array(edge_mask)
             if label == 0:
                 correct_ids = []
             else:
@@ -168,8 +201,8 @@ class BA4label(Benchmark):
         all_explanations = defaultdict(list)
         all_runtimes = defaultdict(list)
         for experiment_i in tq(range(self.sample_count)):
-            train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS)
-            test_dataset = self.create_dataset(int(self.NUM_TRAIN_GRAPHS * self.TEST_RATIO))
+            train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
+            test_dataset = self.create_dataset(int(self.NUM_TRAIN_GRAPHS * self.TEST_RATIO), self.M, self.NUM_NODES)
 
             train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = 1, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = 1, shuffle = True)
@@ -202,6 +235,7 @@ class BA4label(Benchmark):
                 time_wrapper.explain_function = explain_function
                 accs = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name)
                 print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}, Accuracy: {np.mean(accs)}')
+
                 all_explanations[explain_name].append(list(accs))
                 all_runtimes[explain_name].extend(duration_samples)
                 metrics = {
@@ -213,6 +247,62 @@ class BA4label(Benchmark):
                     json.dump(all_explanations, open(file_path, 'w'), indent=2)
                     mlflow.log_artifact(file_path)
                 mlflow.log_metrics(metrics, step=experiment_i)
+
+                iteration_num = 10
+                summary_type = 'sum'
+
+                time_wrapper.explain_function = explain_function
+                accs2 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+{summary_type}, Accuracy: {np.mean(accs2)}')
+
+                all_explanations[explain_name+str(iteration_num)+summary_type].append(list(accs2))
+                all_runtimes[explain_name+str(iteration_num)+summary_type].extend(duration_samples)
+                metrics = {
+                    f'explain_{explain_name}_{iteration_num}_{summary_type}_acc': np.mean(accs2),
+                    f'time_{explain_name}_{iteration_num}_{summary_type}_avg': np.mean(duration_samples),
+                }
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    file_path = os.path.join(tmpdir, 'accuracies.json')
+                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
+                    mlflow.log_artifact(file_path)
+                mlflow.log_metrics(metrics, step=experiment_i)
+
+                summary_type = 'count'
+
+                time_wrapper.explain_function = explain_function
+                accs2 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+{summary_type}, Accuracy: {np.mean(accs2)}')
+
+                all_explanations[explain_name+str(iteration_num)+summary_type].append(list(accs2))
+                all_runtimes[explain_name+str(iteration_num)+summary_type].extend(duration_samples)
+                metrics = {
+                    f'explain_{explain_name}_{iteration_num}_{summary_type}_acc': np.mean(accs2),
+                    f'time_{explain_name}_{iteration_num}_{summary_type}_avg': np.mean(duration_samples),
+                }
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    file_path = os.path.join(tmpdir, 'accuracies.json')
+                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
+                    mlflow.log_artifact(file_path)
+                mlflow.log_metrics(metrics, step=experiment_i)
+
+                summary_type = 'rank'
+
+                time_wrapper.explain_function = explain_function
+                accs2 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+{summary_type}, Accuracy: {np.mean(accs2)}')
+
+                all_explanations[explain_name+str(iteration_num)+summary_type].append(list(accs2))
+                all_runtimes[explain_name+str(iteration_num)+summary_type].extend(duration_samples)
+                metrics = {
+                    f'explain_{explain_name}_{iteration_num}_{summary_type}_acc': np.mean(accs2),
+                    f'time_{explain_name}_{iteration_num}_{summary_type}_avg': np.mean(duration_samples),
+                }
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    file_path = os.path.join(tmpdir, 'accuracies.json')
+                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
+                    mlflow.log_artifact(file_path)
+                mlflow.log_metrics(metrics, step=experiment_i)
+
             print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1} finished. Average Explanation Accuracies for each method:')
             accuracies_summary = {}
             for name, run_accs in all_explanations.items():
@@ -263,6 +353,6 @@ def test_model_output_distribution(graph_class,graph_num):
 
 
 if __name__ == '__main__':
-    A = BA4label(1,1,True,'GraphConvWL')
+    A = BA4label(10,1,True,'GraphConvWL')
     A.run()
     #test_model_output_distribution(3,20)
