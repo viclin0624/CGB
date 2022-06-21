@@ -97,9 +97,9 @@ class Net2(torch.nn.Module):
     '''
     For graph classification
     '''
-    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Mean'):
+    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Sum'):
         super(Net2, self).__init__()
-        dim = 32
+        dim = 16
         self.convs = torch.nn.ModuleList()
         self.readout = readout 
         if conv_type == 'GraphConvWL':#'GCNConv':
@@ -120,14 +120,14 @@ class Net2(torch.nn.Module):
         else:
             self.fc = Linear(dim, num_classes)
 
-    def forward(self, g, x):
+    def forward(self, g, x, edge_weight = None):
         '''
         g: DGL Graph
         x: node feature
         '''
         xs = [x]
         for conv in self.convs:
-            x = conv(g, x)
+            x = conv(g, x, edge_weight)
             x = F.relu(x)
             xs.append(x)
         if self.concat_features:
@@ -137,6 +137,8 @@ class Net2(torch.nn.Module):
             hg = dgl.mean_nodes(g, 'h')
         elif self.readout == 'Max':
             hg = dgl.max_nodes(g, 'h')
+        elif self.readout == 'Sum':
+            hg = dgl.sum_nodes(g, 'h')
         hg = self.fc(hg)
         return F.log_softmax(hg, dim=1)
 
@@ -259,7 +261,7 @@ class FixedNet2(nn.Module):
         hg2 = torch.sigmoid(hg2*1000)
         output = self.output(hg2)
         output = F.relu(output)
-        return F.softmax(output, dim = 1)
+        return F.log_softmax(output, dim = 1)
     
     def use_report(self):
         self.report = True
@@ -315,3 +317,52 @@ class FixedNet2(nn.Module):
             elif k == 1 or k == 4:
                 torch.nn.init.constant_(p, p.item()+np.random.uniform(low,high))
             k += 1
+
+class GCN_train(nn.Module):
+    '''
+    Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
+    '''
+    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
+        super(GCN_train, self).__init__()
+        dim = 32
+        self.report = report
+        self.convs = torch.nn.ModuleList()
+        if conv_type == 'GraphConvWL':#'GCNConv':
+            conv_class = GraphConvWL
+            #kwargs = {'add_self_loops': False}
+        elif conv_type == 'GraphConv':
+            conv_class = GraphConv
+            kwargs = {}
+        else:
+            raise RuntimeError(f"conv_type {conv_type} not supported")
+
+        self.convs.append(conv_class(num_node_features, dim, bias = True))#, **kwargs))
+        for i in range(num_layers - 1):
+            self.convs.append(conv_class(dim, dim, bias = True))#, **kwargs))
+        self.concat_features = concat_features
+
+        self.fc1 = Linear(dim,8, bias = True)
+        self.output = Linear(8,4, bias = True)
+
+
+
+    def forward(self, g, x, edge_weight = None):
+        '''
+        g: DGL Graph
+        x: node feature
+        '''
+        xs = [x]
+        for conv in self.convs:
+            x = conv(g, x, edge_weight)
+            x = F.relu(x)
+            xs.append(x)
+        if self.concat_features:
+            x = torch.cat(xs, dim=1)
+        g.ndata['h'] = x
+        hg = dgl.sum_nodes(g, 'h')
+        hg2 = self.fc1(hg)
+        hg2 = F.relu(hg2)
+        output = self.output(hg2)
+        output = F.relu(output)
+        return F.softmax(output, dim = 1)
+    

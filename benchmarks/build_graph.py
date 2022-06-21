@@ -333,12 +333,13 @@ def build_graph(
 class BA4labelDataset(DGLDataset):
     basis_type = "ba"
 
-    def __init__(self, graphs_num = 1000, nodes_num = 25, m = 1, perturb_dic = {}, no_attach_init_nodes = False):
+    def __init__(self, graphs_num = 1000, nodes_num = 25, m = 1, perturb_dic = {}, no_attach_init_nodes = False, include_bias_class = True):
         self.graphs_num = graphs_num
         self.nodes_num = nodes_num
         self.m = m
         self.perturb_dic = perturb_dic
         self.no_attach_init_nodes = no_attach_init_nodes
+        self.include_bias_class = include_bias_class
         super(BA4labelDataset, self).__init__('BA4labelDataset')
 
     def process(self):
@@ -347,7 +348,10 @@ class BA4labelDataset(DGLDataset):
         self.role_id = []
         self.plug_id = []
         for _ in range(self.graphs_num):
-            which_type = np.random.choice([0,1,2,3])
+            if self.include_bias_class:
+                which_type = np.random.choice([0,1,2,3])
+            else:
+                which_type = np.random.choice([1,2,3])
             perturb_type = np.random.choice([0]+list(self.perturb_dic.keys()))
             if self.m == None:
                 m = np.random.choice([1,3,5])

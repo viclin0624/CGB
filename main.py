@@ -7,8 +7,8 @@ import typer
 #from benchmarks.community_dgl import Community
 #from benchmarks.infection_dgl import Infection
 #from benchmarks.saturation_dgl import Saturation
+#from benchmarks.unfixed_dgl import BA4label
 from benchmarks.fixed_dgl import BA4label
-
 class Experiment(str, Enum):
     infection = "infection"
     community = "community"

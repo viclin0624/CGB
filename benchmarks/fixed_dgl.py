@@ -3,7 +3,7 @@ import os
 import tempfile
 import time
 from matplotlib.collections import Collection
-
+from copy import deepcopy
 import networkx as nx
 import torch
 from torch import nn
@@ -60,9 +60,9 @@ def test_model_fixed(model_test, graphs_num = 1000, m = 5, nodes_num = 25, pertu
     return test_acc
 
 class BA4label(Benchmark):
-    NUM_TRAIN_GRAPHS = 1000
+    NUM_TRAIN_GRAPHS = 100
     NUM_NODES = 50
-    TEST_RATIO = 0.4
+    #TEST_RATIO = 0.1
     LR = 0.005
     M = 5
     print(NUM_NODES,M)
@@ -74,7 +74,7 @@ class BA4label(Benchmark):
         edge_index: 2 elements tuple, u and v
         '''
         if correct_ids == []:
-            if np.max(edge_mask)==0 or np.all(np.mean(edge_mask) == edge_mask):
+            if np.all(np.mean(edge_mask) == edge_mask):
                 return 1
             else:
                 return 0
@@ -113,7 +113,7 @@ class BA4label(Benchmark):
         '''
         Return data
         '''
-        data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True)
+        data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
         print('created one')
         return data
 
@@ -123,44 +123,85 @@ class BA4label(Benchmark):
     def evaluate_explanation(self, explain_function, model, test_dataset, explain_name, iteration = 1, summarytype = 'sum'):
         accs = []
         tested_graphs = 0
+        accs1 = []
+        accs2 = []
+        accs3 = []
+        accs4 = []
         for g, label in tq(test_dataset):
             g = g.to(self.device)
             tested_graphs += 1
             edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
+
             if iteration != 1:
-                if summarytype == 'sum':
-                    for _ in range(1, iteration):
-                        edge_mask += explain_function(model, 'graph', g, g.ndata['x'], label)
-                if summarytype == 'count':
-                    top_edges_index = list(np.argsort(-edge_mask)[:30])
-                    for _ in range(1, iteration):
-                        edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
-                        top_edges_index.extend(list(np.argsort(-edge_mask)[:30]))
-                    edges_index_dic = Counter(top_edges_index)
-                    edge_mask = np.zeros(g.num_edges())
-                    for k,v in edges_index_dic.items():
-                        edge_mask[k] = -v #large v means small mask
-                if summarytype == 'rank':
-                    edges_index = np.argsort(-edge_mask)
-                    edges_rank = {}
-                    for i in range(len(edges_index)):
-                        edges_rank[edges_index[i]] = i
-                    for _ in range(1, iteration):
-                        edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
+                edge_mask_list = [deepcopy(edge_mask)]
+                for _ in range(1,iteration):
+                    new_edge_mask = explain_function(model, 'graph', g, g.ndata['x'], label)
+                    edge_mask_list.append(new_edge_mask)
+                
+                for summarytype in ['sum','count13','count26','rank']:
+                    edge_mask = deepcopy(edge_mask_list[0])
+                    if summarytype == 'sum':
+                        for i in range(1, iteration):
+                            edge_mask += edge_mask_list[i]
+                        sum_edge_mask = edge_mask
+                    if summarytype == 'count26':#influence by threshold and not be appropriate to stable method
+                        top_edges_index = list(np.argsort(-edge_mask)[:26])
+                        for j in range(1, iteration):
+                            edge_mask = edge_mask_list[j]
+                            top_edges_index.extend(list(np.argsort(-edge_mask)[:26]))
+                        edges_index_dic = Counter(top_edges_index)
+                        edge_mask = np.zeros(g.num_edges())
+                        for k,v in edges_index_dic.items():
+                            edge_mask[k] = v 
+                        count26_edge_mask = edge_mask
+                    if summarytype == 'rank':
                         edges_index = np.argsort(-edge_mask)
+                        edges_rank = {}
                         for i in range(len(edges_index)):
-                            edges_rank[edges_index[i]] += i
-                    edge_mask = []
-                    for i in range(g.num_edges()):
-                        edge_mask.append(edges_rank[i])
-                    edge_mask = -np.array(edge_mask)
+                            edges_rank[edges_index[i]] = i
+                        for j in range(1, iteration):
+                            edge_mask = edge_mask_list[j]
+                            edges_index = np.argsort(-edge_mask)
+                            for i in range(len(edges_index)):
+                                edges_rank[edges_index[i]] += i
+                        edge_mask = []
+                        for i in range(g.num_edges()):
+                            edge_mask.append(edges_rank[i])
+                        edge_mask = -np.array(edge_mask)
+                        rank_edge_mask = edge_mask
+                    if summarytype == 'count13':#influence by threshold and not be appropriate to stable method
+                        top_edges_index = list(np.argsort(-edge_mask)[:13])
+                        for j in range(1, iteration):
+                            edge_mask = edge_mask_list[j]
+                            top_edges_index.extend(list(np.argsort(-edge_mask)[:13]))
+                        edges_index_dic = Counter(top_edges_index)
+                        edge_mask = np.zeros(g.num_edges())
+                        for k,v in edges_index_dic.items():
+                            edge_mask[k] = v 
+                        count13_edge_mask = edge_mask
+                if label == 0:
+                    correct_ids = []
+                else:
+                    correct_ids = [x for x in range(len(g.nodes())-10,len(g.nodes()))]
+                explain_acc = self.get_accuracy(g, correct_ids, sum_edge_mask)
+                accs1.append(explain_acc)
+                explain_acc = self.get_accuracy(g, correct_ids, count13_edge_mask)
+                accs2.append(explain_acc)
+                explain_acc = self.get_accuracy(g, correct_ids, rank_edge_mask)
+                accs3.append(explain_acc)
+                explain_acc = self.get_accuracy(g, correct_ids, count26_edge_mask)
+                accs4.append(explain_acc)
+                edge_mask = edge_mask_list[0]
+                
             if label == 0:
                 correct_ids = []
             else:
                 correct_ids = [x for x in range(len(g.nodes())-10,len(g.nodes()))]
+
             explain_acc = self.get_accuracy(g, correct_ids, edge_mask)
             accs.append(explain_acc)
-            mlflow.log_metric('tested_graphs', tested_graphs)
+        if iteration != 1:
+            return accs,accs1,accs2,accs3,accs4
         return accs
 
     def train(self, model, train_loader):
@@ -202,7 +243,7 @@ class BA4label(Benchmark):
         all_runtimes = defaultdict(list)
         for experiment_i in tq(range(self.sample_count)):
             train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
-            test_dataset = self.create_dataset(int(self.NUM_TRAIN_GRAPHS * self.TEST_RATIO), self.M, self.NUM_NODES)
+            test_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
 
             train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = 1, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = 1, shuffle = True)
@@ -232,7 +273,7 @@ class BA4label(Benchmark):
                     duration_samples.append(duration_seconds)
                     return result
 
-                time_wrapper.explain_function = explain_function
+                '''time_wrapper.explain_function = explain_function
                 accs = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name)
                 print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}, Accuracy: {np.mean(accs)}')
 
@@ -246,20 +287,46 @@ class BA4label(Benchmark):
                     file_path = os.path.join(tmpdir, 'accuracies.json')
                     json.dump(all_explanations, open(file_path, 'w'), indent=2)
                     mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)
+                mlflow.log_metrics(metrics, step=experiment_i)'''
 
                 iteration_num = 10
                 summary_type = 'sum'
 
                 time_wrapper.explain_function = explain_function
-                accs2 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+{summary_type}, Accuracy: {np.mean(accs2)}')
+                accs, accs1, accs2, accs3, accs4 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}, Accuracy: {np.mean(accs)}')
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+sum, Accuracy: {np.mean(accs1)}')
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+count13, Accuracy: {np.mean(accs2)}')
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+rank, Accuracy: {np.mean(accs3)}')
+                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+count26, Accuracy: {np.mean(accs4)}')
+                
+                all_explanations[explain_name].append(list(accs))
+                all_explanations[explain_name+str(iteration_num)+'sum'].append(list(accs1))
+                all_explanations[explain_name+str(iteration_num)+'count13'].append(list(accs2))
+                all_explanations[explain_name+str(iteration_num)+'rank'].append(list(accs3))
+                all_explanations[explain_name+str(iteration_num)+'count26'].append(list(accs4))
+                
+                all_runtimes[explain_name].extend(duration_samples)
+                all_runtimes[explain_name+str(iteration_num)+'sum'].extend(duration_samples)
+                all_runtimes[explain_name+str(iteration_num)+'count13'].extend(duration_samples)
+                all_runtimes[explain_name+str(iteration_num)+'rank'].extend(duration_samples)
+                all_runtimes[explain_name+str(iteration_num)+'count26'].extend(duration_samples)
 
-                all_explanations[explain_name+str(iteration_num)+summary_type].append(list(accs2))
-                all_runtimes[explain_name+str(iteration_num)+summary_type].extend(duration_samples)
                 metrics = {
-                    f'explain_{explain_name}_{iteration_num}_{summary_type}_acc': np.mean(accs2),
-                    f'time_{explain_name}_{iteration_num}_{summary_type}_avg': np.mean(duration_samples),
+                    f'explain_{explain_name}_acc': np.mean(accs),
+                    f'time_{explain_name}_{iteration_num}_avg': np.mean(duration_samples),
+
+                    f'explain_{explain_name}_{iteration_num}_sum_acc': np.mean(accs1),
+                    f'time_{explain_name}_{iteration_num}_sum_avg': np.mean(duration_samples),
+                    
+                    f'explain_{explain_name}_{iteration_num}_count13_acc': np.mean(accs2),
+                    f'time_{explain_name}_{iteration_num}_count13_avg': np.mean(duration_samples),
+                    
+                    f'explain_{explain_name}_{iteration_num}_rank_acc': np.mean(accs3),
+                    f'time_{explain_name}_{iteration_num}_rank_avg': np.mean(duration_samples),
+
+                    f'explain_{explain_name}_{iteration_num}_count26_acc': np.mean(accs4),
+                    f'time_{explain_name}_{iteration_num}_count26_avg': np.mean(duration_samples),
                 }
                 with tempfile.TemporaryDirectory() as tmpdir:
                     file_path = os.path.join(tmpdir, 'accuracies.json')
@@ -267,41 +334,6 @@ class BA4label(Benchmark):
                     mlflow.log_artifact(file_path)
                 mlflow.log_metrics(metrics, step=experiment_i)
 
-                summary_type = 'count'
-
-                time_wrapper.explain_function = explain_function
-                accs2 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+{summary_type}, Accuracy: {np.mean(accs2)}')
-
-                all_explanations[explain_name+str(iteration_num)+summary_type].append(list(accs2))
-                all_runtimes[explain_name+str(iteration_num)+summary_type].extend(duration_samples)
-                metrics = {
-                    f'explain_{explain_name}_{iteration_num}_{summary_type}_acc': np.mean(accs2),
-                    f'time_{explain_name}_{iteration_num}_{summary_type}_avg': np.mean(duration_samples),
-                }
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    file_path = os.path.join(tmpdir, 'accuracies.json')
-                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
-                    mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)
-
-                summary_type = 'rank'
-
-                time_wrapper.explain_function = explain_function
-                accs2 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+{summary_type}, Accuracy: {np.mean(accs2)}')
-
-                all_explanations[explain_name+str(iteration_num)+summary_type].append(list(accs2))
-                all_runtimes[explain_name+str(iteration_num)+summary_type].extend(duration_samples)
-                metrics = {
-                    f'explain_{explain_name}_{iteration_num}_{summary_type}_acc': np.mean(accs2),
-                    f'time_{explain_name}_{iteration_num}_{summary_type}_avg': np.mean(duration_samples),
-                }
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    file_path = os.path.join(tmpdir, 'accuracies.json')
-                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
-                    mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)
 
             print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1} finished. Average Explanation Accuracies for each method:')
             accuracies_summary = {}

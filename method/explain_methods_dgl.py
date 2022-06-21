@@ -147,6 +147,7 @@ def explain_gradXact(model, node_idx, x, edge_index, target, include_edges=None)
 def explain_sa(model, task_type, g, x, target):
     saliency = Saliency(model_forward)
     input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
+    input_mask.retain_grad()
     attr = saliency.attribute(input_mask, target=int(target), additional_forward_args = (g,model,x), abs = False)#IG忽略了边之间的互相影响每次会给所有边相同的weight
     attr = attr.detach().cpu().numpy()
     return attr
@@ -257,24 +258,27 @@ def explain_gnnexplainer(model, task_type, g, x, target):
     return edge_weights.cpu().numpy()
 
 def explain_pgmexplainer(model, task_type, g, x, target, include_edges=None):
-    #test_loader = DataLoader(g, batch_size=1, shuffle=False, drop_last=False, collate_fn=collate)
-    #for iter, (graph, label, snorm_n, snorm_e) in enumerate(test_loader):
+    #Get pred_threshold by predict of model (Actually not use in Explainer)
     pred = model.forward(g, x).cpu()
-    soft_pred = np.asarray(softmax(np.asarray(pred[0].data)))
+    soft_pred = np.array(pred[0].data)
     pred_threshold = 0.1*np.max(soft_pred)
+
+    #Implement Graph_Explainer with 
     e = pe.Graph_Explainer(model, g,
                             perturb_feature_list = [0],
                             perturb_mode = "mean",
                             perturb_indicator = "diff")
     pgm_nodes, p_values, candidates = e.explain(num_samples = 1000, percentage = 10, 
-                            top_node = 5, p_threshold = 0.05, pred_threshold = pred_threshold)
-    label = np.argmax(soft_pred)
-    pgm_nodes_filter = [i for i in pgm_nodes if p_values[i] < 0.02]
+                            top_node = 12, p_threshold = 0.05, pred_threshold = pred_threshold)
     explanation = zip(pgm_nodes,p_values)
+
+    #Importance of node = 1 - p-value, convert node importance to edge importance
     node_attr = np.zeros(x.shape[0])
     for node, p_value in explanation:
-        node_attr[node] = 1 - p_value
+        node_attr[node] = 1-p_value
     edge_mask = node_attr_to_edge(g, node_attr)
+
+
     return edge_mask
 
 def explain_subgraphx(model, node_idx, x, edge_index, target, include_edges=None):
