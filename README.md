@@ -7,3 +7,5 @@ method: main file is explain_methods_dgl.py, other files are implementation of G
 mlruns: auto generate files in experiment
 
 model: main file is model_dgl.py
+
+model0-29: saved models in experiment
