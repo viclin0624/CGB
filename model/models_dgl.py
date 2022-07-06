@@ -53,46 +53,6 @@ class GraphConvWL(nn.Module):
         self_feat = self.conv_from_self(feat)
         return neigh_feat+self_feat
 
-
-class Net1(torch.nn.Module):
-    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type):
-        super(Net1, self).__init__()
-        dim = 32
-        self.convs = torch.nn.ModuleList()
-        if conv_type == 'GraphConvWL':#'GCNConv':
-            conv_class = GraphConvWL
-            #kwargs = {'add_self_loops': False}
-        elif conv_type == 'GraphConv':
-            conv_class = GraphConv
-            kwargs = {}
-        else:
-            raise RuntimeError(f"conv_type {conv_type} not supported")
-
-        self.convs.append(conv_class(num_node_features, dim))#, **kwargs))
-        for i in range(num_layers - 1):
-            self.convs.append(conv_class(dim, dim))#, **kwargs))
-        self.concat_features = concat_features
-        if concat_features:
-            self.fc = Linear(dim * num_layers + num_node_features, num_classes)
-        else:
-            self.fc = Linear(dim, num_classes)
-
-    def forward(self, g, x):
-        '''
-        g: DGL Graph
-        x: node feature
-        '''
-        xs = [x]
-        for conv in self.convs:
-            x = conv(g, x)
-            x = F.relu(x)
-            xs.append(x)
-        if self.concat_features:
-            x = torch.cat(xs, dim=1)
-        x = self.fc(x)
-        return F.log_softmax(x, dim=1)
-
-        
 class Net2(torch.nn.Module):
     '''
     For graph classification
@@ -142,85 +102,12 @@ class Net2(torch.nn.Module):
         hg = self.fc(hg)
         return F.log_softmax(hg, dim=1)
 
-class FixedNet(nn.Module):
+class GCN_fixed(nn.Module):
     '''
     Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
     '''
     def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
-        super(FixedNet, self).__init__()
-        dim = 1
-        self.report = report
-        self.convs = torch.nn.ModuleList()
-        if conv_type == 'GraphConvWL':#'GCNConv':
-            conv_class = GraphConvWL
-            #kwargs = {'add_self_loops': False}
-        elif conv_type == 'GraphConv':
-            conv_class = GraphConv
-            kwargs = {}
-        else:
-            raise RuntimeError(f"conv_type {conv_type} not supported")
-
-        self.convs.append(conv_class(num_node_features, dim, bias = True))#, **kwargs))
-        for i in range(num_layers - 1):
-            self.convs.append(conv_class(dim, dim, bias = True))#, **kwargs))
-        self.concat_features = concat_features
-
-
-    def forward(self, g, x):
-        '''
-        g: DGL Graph
-        x: node feature
-        '''
-        xs = [x]
-        for conv in self.convs:
-            x = conv(g, x)
-            x = F.relu(x)
-            xs.append(x)
-        if self.concat_features:
-            x = torch.cat(xs, dim=1)
-        g.ndata['h'] = x
-        hg = dgl.sum_nodes(g, 'h')
-        if self.report == True:
-            return hg, xs
-        '''result = []
-        for h in hg:
-            if h == 0:
-                result.append([1,0,0,0])
-            elif h == 20:
-                result.append([0,1,0,0])
-            elif h == 14:
-                result.append([0,0,1,0])
-            else:
-                result.append([0,0,0,1])
-        return torch.tensor(result)'''
-        return hg
-    
-    def use_report(self):
-        self.report = True
-
-    def unuse_report(self):
-        self.report = False
-
-    def set_paramerters(self):
-        k = 0
-        for p in self.parameters():
-            if k == 0 or k == 2:
-                torch.nn.init.constant_(p, 1)
-            elif k == 3:
-                torch.nn.init.constant_(p, -1)
-            elif k == 5:
-                torch.nn.init.constant_(p, 3)
-            else:
-                torch.nn.init.constant_(p, 0)
-            k += 1
-
-
-class FixedNet2(nn.Module):
-    '''
-    Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
-    '''
-    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
-        super(FixedNet2, self).__init__()
+        super(GCN_fixed, self).__init__()
         dim = 1
         self.report = report
         self.convs = torch.nn.ModuleList()

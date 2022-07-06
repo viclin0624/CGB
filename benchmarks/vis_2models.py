@@ -1,3 +1,4 @@
+# Plot graph with edge mask of same sample when use IG interpret the fixed model and a trained model
 import json
 import os
 import tempfile
@@ -21,49 +22,24 @@ from collections import Counter
 from benchmarks.build_graph import BA4labelDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
-
-def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
-    seed = None, no_attach_init_nodes=False):
-    '''
-    This function is for test model return a networkx instance.
-    '''
-    basis_type = "ba"
-    which_type = label
-    if which_type == 0:
-        if perturb_type == 0:
-            G, role_id, plug_id = build_graph(nodes_num, basis_type, [], start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
-        else:
-            G, role_id, plug_id = build_graph(nodes_num - perturb_type, basis_type, [[perturb_dic[perturb_type]]], start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
-    else:
-        list_shapes = [["house"]] * (which_type - 1) + [["five_cycle"]] * (3 - which_type)
-        if perturb_type != 0:
-            list_shapes = list_shapes + [[perturb_dic[perturb_type]]]
-        G, role_id, plug_id = build_graph(nodes_num-10-perturb_type, basis_type, list_shapes, start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
-    return G
-
-def test_model_fixed(model_test, graphs_num = 1000, m = 5, nodes_num = 25, perturb_dic = {}, device = torch.device('cuda'), no_attach_init_nodes = False):
-    model_test.eval()
-    data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = perturb_dic, no_attach_init_nodes = no_attach_init_nodes)
-    testdataloader = dgl.dataloading.GraphDataLoader(data, batch_size = 16, shuffle = True)
-    correct = 0
-    total = 0
-    for g, labels in testdataloader:
-        g = g.to(device)
-        output = model_test(g, g.ndata['x'])
-        pred = output.max(dim=1)[1]
-        eq_pred = pred.eq(labels)
-        correct += eq_pred.sum().item()
-        if eq_pred.sum().item() != eq_pred.shape[0]:
-            return g,eq_pred,labels
-        total += len(labels.to(device))
-    test_acc = correct/total
-    return test_acc
+import matplotlib.pyplot as plt
+def draw_explanation(g, edge_mask):
+    plt.figure(figsize=(25,25),edgecolor='g')
+    fig,ax = plt.subplots(figsize=(10,10))
+    g = g.to(torch.device('cpu'))
+    g.edata['weight'] = torch.tensor(edge_mask)
+    g_nx = dgl.to_networkx(g,edge_attrs=['weight']) 
+    edges = g_nx.edges()
+    weights = [g_nx[u][v][0]['weight']*0.5+0.2 for u,v in edges]
+    pos = nx.spring_layout(g_nx)
+    nx.draw_networkx_nodes(g_nx,pos)
+    nx.draw_networkx_edges(g_nx,pos, width=weights,connectionstyle="arc3,rad=0.3")
 
 class BA4label(Benchmark):
-    NUM_TRAIN_GRAPHS = 100
+    NUM_TRAIN_GRAPHS = 1000
     NUM_NODES = 50
-    #TEST_RATIO = 0.1
-    LR = 0.005
+    TEST_RATIO = 0.001
+    LR = 0.003
     M = 5
     print(NUM_NODES,M)
     NO_ATTACH_INIT_NODES = True
@@ -109,11 +85,11 @@ class BA4label(Benchmark):
             '''
             return correct_count / len(correct_edges)
 
-    def create_dataset(self, graphs_num, m = 6, nodes_num = 50):
+    def create_dataset(self, graphs_num, m = 6, nodes_num = 50, include_bias_class = True):
         '''
         Return data
         '''
-        data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
+        data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=include_bias_class)
         print('created one')
         return data
 
@@ -199,21 +175,27 @@ class BA4label(Benchmark):
                 correct_ids = [x for x in range(len(g.nodes())-10,len(g.nodes()))]
 
             explain_acc = self.get_accuracy(g, correct_ids, edge_mask)
+            draw_explanation(g, edge_mask)
+            g = g.to(self.device)
             accs.append(explain_acc)
         if iteration != 1:
             return accs,accs1,accs2,accs3,accs4
         return accs
 
-    def train(self, model, train_loader):
-        #don't need to train
+    def train(self, model, optimizer, train_loader):
+        #need to train
         loss_all = 0
         for g, label in train_loader:
             g = g.to(self.device)
             label = label.to(self.device)
+            optimizer.zero_grad()
             output = model(g, g.ndata['x'])
             loss = F.nll_loss(output.float(), label)
+            loss.backward()
             loss_all += loss.item()
+            optimizer.step()
         return loss_all / len(train_loader)
+
 
     def test(self, model, loader):
         model.eval()
@@ -230,25 +212,31 @@ class BA4label(Benchmark):
         return correct / total
 
     def train_and_test(self, model, train_loader, test_loader):
-        train_loss = self.train(model, train_loader)
-        train_acc = self.test(model, train_loader)
-        test_acc = self.test(model, test_loader)
-        print('train_loss:',train_loss, 'train_acc:',train_acc, 'test_acc:', test_acc)
+        optimizer = torch.optim.Adam(model.parameters(), lr=self.LR, weight_decay=self.WEIGHT_DECAY)
+        mlflow.log_param('weight_decay', self.WEIGHT_DECAY)
+        mlflow.log_param('lr', self.LR)
+        mlflow.log_param('epochs', self.EPOCHS)
+        pbar = tq(range(self.EPOCHS))
+        for epoch in pbar:
+            train_loss = self.train(model, optimizer, train_loader)
+            train_acc = self.test(model, train_loader)
+            test_acc = self.test(model, test_loader)
+            pbar.set_postfix(train_loss=train_loss, train_acc=train_acc, test_acc=test_acc)
         return train_acc, test_acc
+
 
     def run(self):
         print(f"Using device {self.device}")
         benchmark_name = self.__class__.__name__
         all_explanations = defaultdict(list)
         all_runtimes = defaultdict(list)
-        for experiment_i in tq(range(self.sample_count)):
-            train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
-            test_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
+        for experiment_i in range(1):
+            train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES, include_bias_class = True)
+            test_dataset = self.create_dataset(int(self.NUM_TRAIN_GRAPHS*self.TEST_RATIO), self.M, self.NUM_NODES, include_bias_class = False)
 
-            train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = 1, shuffle = True)
+            train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = 32, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = 1, shuffle = True)
-            model = GCN_fixed(1, 4, 2, False, 'GraphConvWL').to(self.device)
-            model.set_paramerters()
+            model = Net2(1, 4, 2, False, 'GraphConvWL').to(self.device)
             model.to(self.device)
             train_acc, test_acc = self.train_and_test(model, train_dataloader, test_dataloader)
             if not self.is_trained_model_valid(test_acc):
@@ -273,7 +261,7 @@ class BA4label(Benchmark):
                     duration_samples.append(duration_seconds)
                     return result
 
-                '''time_wrapper.explain_function = explain_function
+                time_wrapper.explain_function = explain_function
                 accs = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name)
                 print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}, Accuracy: {np.mean(accs)}')
 
@@ -287,9 +275,9 @@ class BA4label(Benchmark):
                     file_path = os.path.join(tmpdir, 'accuracies.json')
                     json.dump(all_explanations, open(file_path, 'w'), indent=2)
                     mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)'''
+                mlflow.log_metrics(metrics, step=experiment_i)
 
-                iteration_num = 10
+                '''iteration_num = 10
                 summary_type = 'sum'
 
                 time_wrapper.explain_function = explain_function
@@ -332,7 +320,7 @@ class BA4label(Benchmark):
                     file_path = os.path.join(tmpdir, 'accuracies.json')
                     json.dump(all_explanations, open(file_path, 'w'), indent=2)
                     mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)
+                mlflow.log_metrics(metrics, step=experiment_i)'''
 
 
             print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1} finished. Average Explanation Accuracies for each method:')
@@ -349,41 +337,80 @@ class BA4label(Benchmark):
                 summary = {'accuracies': accuracies_summary, 'runtime': runtime_summary}
                 json.dump(summary, open(file_path, 'w'), indent=2)
                 mlflow.log_artifact(file_path)
+model = torch.load('/home/ubuntu/Maolin/eva_gnn/dgl-gnn-exp/model9.pkl')
+model2 = GCN_fixed(1, 4, 2, False, 'GraphConvWL')
+model2.set_paramerters()
 
-def test_model_acc():
-    model_fixed = GCN_fixed(1, 4, 2, False, 'GraphConvWL')
-    model_fixed.set_paramerters()
-    device = torch.device('cuda')
-    model_fixed = model_fixed.to(device)
-    model_fixed.unuse_report()
-    G = generate_single_sample(3, 0, nodes_num = 25, m = 6, perturb_dic = {4:'square_diagonal'}, seed = 0, no_attach_init_nodes = True)
-    pos = nx.spring_layout(G, seed = 0)
-    nx.draw(G, pos, with_labels = True, font_color = 'white')
-    g = dgl.from_networkx(G)
+data = BA4labelDataset(graphs_num=10, m = 5, nodes_num=50, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
+test_dataloader = dgl.dataloading.GraphDataLoader(data, batch_size = 1, shuffle = True)
+def draw_explanation(g, edge_mask, name, pos = None):
+    if name[2] in ['1','2','3']:
+        label = int(name[2])
+    else:
+        label = int(name[3])
+    plt.figure(figsize=(25,25),edgecolor='g')
+    fig,ax = plt.subplots(figsize=(10,10))
+    g = g.to(torch.device('cpu'))
+    g.edata['weight'] = torch.tensor(edge_mask)
+    g_nx = dgl.to_networkx(g,edge_attrs=['weight']) 
+    edges = g_nx.edges()
+    #weights = [g_nx[u][v][0]['weight']*0.5+0.2 for u,v in edges]
+    #4 d. Form a filtered list with just the weight you want to draw
+    weighted_edges = [(node1,node2) for (node1,node2,edge_attr) in g_nx.edges(data=True)]
+    width = (torch.tensor(edge_mask)-np.min(edge_mask))/np.max(edge_mask)
+    node_color = ['b' for i in range(g.num_nodes())]
+    for i in range(1,11):
+        node_color[-i] = 'r'
+    edge_color = ['b' for i in range(g.num_edges())]
+    ground_truth_num_dic = {1:22, 2:24, 3:26}
+    k = 0 
+    for i in np.argsort(-edge_mask):
+        if k < ground_truth_num_dic[label]:
+            edge_color[i] = 'r'
+        else:
+            width[i] = 0
+        k += 1
+    pos = nx.circular_layout(g_nx)
+    if pos == None:
+        pos = nx.spring_layout(g_nx)
+        if name[2] == '3':
+            nodepos = [pos[g.num_nodes()-i] for i in range(1,11)]
+            meanx = 0
+            meany = 0
+            for i in range(10):
+                meanx += nodepos[i][0]
+                meany += nodepos[i][1]
+            meanx = meanx/10
+            meany = meany/10
+            for i in range(10):
+                pos[g.num_nodes()-10+i] = np.array([(nodepos[i][0]-meanx)*1.5+nodepos[i][0],(nodepos[i][1]-meany)*3+nodepos[i][1]])
+        if name[3] == '3':
+            for i in range(g.num_nodes()):
+                if i <40:
+                    pos[i] = np.array([0.5+np.random.uniform(6,18),0.5+np.random.uniform(6,18)])
+                elif i<45:
+                    pos[i] = np.array([0.5+np.random.uniform(0,6),0.5+np.random.uniform(0,6)])
+                else:
+                    pos[i] = np.array([0.5+np.random.uniform(18,24),0.5+np.random.uniform(18,24)])
+    nx.draw_networkx_nodes(g_nx,pos,node_size=100,node_color=node_color)
+    nx.draw_networkx_edges(g_nx,pos,edgelist=weighted_edges,width=width,edge_color=edge_color,connectionstyle="arc3,rad=0.3")
+    # nx.draw_networkx_edges(g_nx,pos, alpha=torch.tensor(edge_mask),connectionstyle="arc3,rad=0.3")
+    plt.savefig('visresult/'+name+'.png')
+    plt.close()
+    return pos
+device = torch.device('cuda:0')
+count = -1 
+model2.to(device)
+model.to(device)
+for g, label in test_dataloader:
     g = g.to(device)
-    output = model_fixed(g, torch.ones((25,1)).to(device))
-    print(output)
-    test_acc = test_model_fixed(model_fixed, graphs_num = 1000, m = 6, nodes_num = 50, no_attach_init_nodes = True)
-    print(test_acc)
+    count += 1
+    edge_mask = explain_ig(model2, 'graph', g, g.ndata['x'], label)
+    model_result = model2(g, g.ndata['x'])
+    pos = draw_explanation(g, edge_mask, str(count)+'f'+str(label.cpu().item())+str(model_result.detach().cpu().numpy()))
 
-def test_model_output_distribution(graph_class,graph_num):
-    model_fixed = GCN_fixed(1, 4, 2, False, 'GraphConvWL')
-    model_fixed.set_paramerters()
-    device = torch.device('cuda')
-    model_fixed = model_fixed.to(device)
-    model_fixed.unuse_report()
-    result = []
-    for i in range(graph_num):
-        G = generate_single_sample(graph_class, 0, nodes_num = 50, m = 6, perturb_dic = {}, no_attach_init_nodes = True)
-        G = dgl.from_networkx(G)
-        cut_index = np.random.choice(list(range(G.num_edges())))
-        G = dgl.remove_edges(G, cut_index)
-        G = G.to(device)
-        result.append(model_fixed(G, torch.ones((50,1)).to(device)))
-    print(result)
-    return result
-
-
-if __name__ == '__main__':
-    A = BA4label(10,1,True,'GraphConvWL')
-    A.run()
+    edge_mask = explain_ig(model, 'graph', g, g.ndata['x'], label)
+    model_result = model(g, g.ndata['x'])
+    draw_explanation(g, edge_mask, str(count)+'uf'+str(label.cpu().item())+str(model_result.detach().cpu().numpy()),pos)
+    
+    

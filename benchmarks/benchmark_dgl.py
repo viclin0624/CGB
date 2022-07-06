@@ -18,7 +18,6 @@ import torch
 #from models import Net1
 import sys
 sys.path.append("..")
-from model.models_dgl import Net1
 
 class Benchmark(object):
     '''
@@ -29,15 +28,12 @@ class Benchmark(object):
     NUM_GRAPHS = 2
     TEST_RATIO = 0.5
     PGMEXPLAINER_SUBSAMPLE_PER_GRAPH = 20
-    METHODS = [#'pagerank', 'pgmexplainer', 'occlusion', 'distance', 'gradXact', 
-    #'pgmexplainer'
-    #'gnnexplainer'
-    'sa'
-    #'random'
-    #'ig'#, 'sa_node',
-               #'ig_node', 'sa', 'gnnexplainer',
-               #'subgraphx'
-               ]
+    METHODS = [
+    'pgmexplainer',
+    'gnnexplainer',
+    'sa',
+    'random',
+    'ig'           ]
     LR = 0.0003
     EPOCHS = 400
     WEIGHT_DECAY = 0
@@ -124,67 +120,4 @@ class Benchmark(object):
         return True
 
     def run(self):
-        print(f"Using device {self.device}")
-        benchmark_name = self.__class__.__name__
-        all_explanations = defaultdict(list)
-        all_runtimes = defaultdict(list)
-        for experiment_i in tq(range(self.sample_count)):
-            dataset = [self.create_dataset() for i in range(self.NUM_GRAPHS)]
-            split_point = int(len(dataset) * self.TEST_RATIO)
-            test_dataset = dataset[:split_point]
-            train_dataset = dataset[split_point:]
-            data = dataset[0]
-            model = Net1(data.num_node_features, data.num_classes, self.num_layers, self.concat_features,
-                         self.conv_type).to(
-                self.device)
-            train_acc, test_acc = self.train_and_test(model, train_dataset, test_dataset)
-            if not self.is_trained_model_valid(test_acc):
-                print('Model accuracy was not valid, ignoring this experiment')
-                continue
-            model.eval()
-            metrics = {
-                'train_acc': train_acc,
-                'test_acc': test_acc,
-            }
-            mlflow.log_metrics(metrics, step=experiment_i)
-
-            for explain_name in self.METHODS:
-                explain_function = eval('explain_' + explain_name)
-                duration_samples = []
-
-                def time_wrapper(*args, **kwargs):
-                    start_time = time.time()
-                    result = explain_function(*args, **kwargs)
-                    end_time = time.time()
-                    duration_seconds = end_time - start_time
-                    duration_samples.append(duration_seconds)
-                    return result
-
-                time_wrapper.explain_function = explain_function
-                accs = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name)
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}, Accuracy: {np.mean(accs)}')
-                all_explanations[explain_name].append(list(accs))
-                all_runtimes[explain_name].extend(duration_samples)
-                metrics = {
-                    f'explain_{explain_name}_acc': np.mean(accs),
-                    f'time_{explain_name}_s_avg': np.mean(duration_samples),
-                }
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    file_path = os.path.join(tmpdir, 'accuracies.json')
-                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
-                    mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)
-            print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1} finished. Average Explanation Accuracies for each method:')
-            accuracies_summary = {}
-            for name, run_accs in all_explanations.items():
-                run_accs = [np.mean(single_run_acc) for single_run_acc in run_accs]
-                accuracies_summary[name] = {'avg': np.mean(run_accs), 'std': np.std(run_accs), 'count': len(run_accs)}
-                print(f'{name} : avg:{np.mean(run_accs)} std:{np.std(run_accs)}')
-            runtime_summary = {}
-            for name, runtimes in all_runtimes.items():
-                runtime_summary[name] = {'avg': np.mean(runtimes), 'std': np.std(runtimes)}
-            with tempfile.TemporaryDirectory() as tmpdir:
-                file_path = os.path.join(tmpdir, 'summary.json')
-                summary = {'accuracies': accuracies_summary, 'runtime': runtime_summary}
-                json.dump(summary, open(file_path, 'w'), indent=2)
-                mlflow.log_artifact(file_path)
+        raise NotImplementedError

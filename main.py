@@ -4,15 +4,8 @@ from enum import Enum
 import mlflow
 import typer
 
-#from benchmarks.community_dgl import Community
-#from benchmarks.infection_dgl import Infection
-#from benchmarks.saturation_dgl import Saturation
-#from benchmarks.unfixed_dgl import BA4label
 from benchmarks.fixed_dgl import BA4label
 class Experiment(str, Enum):
-    infection = "infection"
-    community = "community"
-    saturation = "saturation"
     ba4label = "ba4label"
 
 
@@ -33,9 +26,6 @@ def main(experiment: Experiment = typer.Argument(..., help="Dataset to use"),
     except FileNotFoundError:
         pass
     class_map = {
-        #Experiment.infection: Infection,
-        #Experiment.community: Community,
-        #Experiment.saturation: Saturation,
         Experiment.ba4label: BA4label,
     }
     benchmark_class = class_map[experiment]
@@ -44,5 +34,4 @@ def main(experiment: Experiment = typer.Argument(..., help="Dataset to use"),
 
 
 if __name__ == "__main__":
-    #main(Experiment("community"),1,4,True, 'GraphConv')
     typer.run(main)
