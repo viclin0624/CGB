@@ -53,12 +53,12 @@ class GraphConvWL(nn.Module):
         self_feat = self.conv_from_self(feat)
         return neigh_feat+self_feat
 
-class Net2(torch.nn.Module):
+class GCN_unfixed(torch.nn.Module):
     '''
     For graph classification
     '''
     def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Sum'):
-        super(Net2, self).__init__()
+        super(GCN_unfixed, self).__init__()
         dim = 16
         self.convs = torch.nn.ModuleList()
         self.readout = readout 
@@ -205,15 +205,17 @@ class GCN_fixed(nn.Module):
                 torch.nn.init.constant_(p, p.item()+np.random.uniform(low,high))
             k += 1
 
-class GCN_train(nn.Module):
+
+
+class Net2(torch.nn.Module):
     '''
-    Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
+    Same to GCN_unfixed.
     '''
-    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
-        super(GCN_train, self).__init__()
-        dim = 32
-        self.report = report
+    def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Sum'):
+        super(GCN_unfixed, self).__init__()
+        dim = 16
         self.convs = torch.nn.ModuleList()
+        self.readout = readout 
         if conv_type == 'GraphConvWL':#'GCNConv':
             conv_class = GraphConvWL
             #kwargs = {'add_self_loops': False}
@@ -223,15 +225,14 @@ class GCN_train(nn.Module):
         else:
             raise RuntimeError(f"conv_type {conv_type} not supported")
 
-        self.convs.append(conv_class(num_node_features, dim, bias = True))#, **kwargs))
+        self.convs.append(conv_class(num_node_features, dim))#, **kwargs))
         for i in range(num_layers - 1):
-            self.convs.append(conv_class(dim, dim, bias = True))#, **kwargs))
+            self.convs.append(conv_class(dim, dim))#, **kwargs))
         self.concat_features = concat_features
-
-        self.fc1 = Linear(dim,8, bias = True)
-        self.output = Linear(8,4, bias = True)
-
-
+        if concat_features:
+            self.fc = Linear(dim * num_layers + num_node_features, num_classes)
+        else:
+            self.fc = Linear(dim, num_classes)
 
     def forward(self, g, x, edge_weight = None):
         '''
@@ -246,10 +247,11 @@ class GCN_train(nn.Module):
         if self.concat_features:
             x = torch.cat(xs, dim=1)
         g.ndata['h'] = x
-        hg = dgl.sum_nodes(g, 'h')
-        hg2 = self.fc1(hg)
-        hg2 = F.relu(hg2)
-        output = self.output(hg2)
-        output = F.relu(output)
-        return F.softmax(output, dim = 1)
-    
+        if self.readout == 'Mean':
+            hg = dgl.mean_nodes(g, 'h')
+        elif self.readout == 'Max':
+            hg = dgl.max_nodes(g, 'h')
+        elif self.readout == 'Sum':
+            hg = dgl.sum_nodes(g, 'h')
+        hg = self.fc(hg)
+        return F.log_softmax(hg, dim=1)

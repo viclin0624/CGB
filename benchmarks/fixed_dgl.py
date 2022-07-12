@@ -21,12 +21,12 @@ from collections import Counter
 from benchmarks.build_graph import BA4labelDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
-
+'''
 def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
     seed = None, no_attach_init_nodes=False):
-    '''
+    
     This function is for test model return a networkx instance.
-    '''
+    
     basis_type = "ba"
     which_type = label
     if which_type == 0:
@@ -57,15 +57,14 @@ def test_model_fixed(model_test, graphs_num = 1000, m = 5, nodes_num = 25, pertu
             return g,eq_pred,labels
         total += len(labels.to(device))
     test_acc = correct/total
-    return test_acc
+    return test_acc'''
 
 class BA4label(Benchmark):
     NUM_TRAIN_GRAPHS = 100
+    NUM_TEST_GRAPHS = 100
     NUM_NODES = 50
-    #TEST_RATIO = 0.1
-    LR = 0.005
     M = 5
-    print(NUM_NODES,M)
+    ITERATION_NUM_OF_SUMMARY = 10
     NO_ATTACH_INIT_NODES = True
 
     @staticmethod
@@ -238,12 +237,13 @@ class BA4label(Benchmark):
 
     def run(self):
         print(f"Using device {self.device}")
+        print('Number of nodes in BA graph:',self.NUM_NODES,';Parameter of BA graph:',self.M)
         benchmark_name = self.__class__.__name__
         all_explanations = defaultdict(list)
         all_runtimes = defaultdict(list)
         for experiment_i in tq(range(self.sample_count)):
             train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
-            test_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES)
+            test_dataset = self.create_dataset(self.NUM_TEST_GRAPHS, self.M, self.NUM_NODES)
 
             train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = 1, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = 1, shuffle = True)
@@ -289,7 +289,7 @@ class BA4label(Benchmark):
                     mlflow.log_artifact(file_path)
                 mlflow.log_metrics(metrics, step=experiment_i)'''
 
-                iteration_num = 10
+                iteration_num = self.ITERATION_NUM_OF_SUMMARY
                 summary_type = 'sum'
 
                 time_wrapper.explain_function = explain_function
@@ -349,7 +349,7 @@ class BA4label(Benchmark):
                 summary = {'accuracies': accuracies_summary, 'runtime': runtime_summary}
                 json.dump(summary, open(file_path, 'w'), indent=2)
                 mlflow.log_artifact(file_path)
-
+'''
 def test_model_acc():
     model_fixed = GCN_fixed(1, 4, 2, False, 'GraphConvWL')
     model_fixed.set_paramerters()
@@ -381,7 +381,7 @@ def test_model_output_distribution(graph_class,graph_num):
         G = G.to(device)
         result.append(model_fixed(G, torch.ones((50,1)).to(device)))
     print(result)
-    return result
+    return result'''
 
 
 if __name__ == '__main__':

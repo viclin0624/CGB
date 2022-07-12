@@ -5,17 +5,19 @@ import mlflow
 import typer
 
 from benchmarks.fixed_dgl import BA4label
+from benchmarks.unfixed_dgl import BA4label_unfixed_model
 class Experiment(str, Enum):
     ba4label = "ba4label"
+    ba4label_unfixed = "ba4label_unfixed"
 
 
 def main(experiment: Experiment = typer.Argument(..., help="Dataset to use"),
          sample_count: int = typer.Option(10, help='How many times to retry the whole experiment'),
-         num_layers: int = typer.Option(4, help='Number of layers in the GNN model'),
-         concat_features: bool = typer.Option(True,
-                                              help='Concat embeddings of each convolutional layer for final fc layers'),
-         conv_type: str = typer.Option('GraphConv',
-                                       help="Convolution class. Can be GCNConv or GraphConv"),
+         #num_layers: int = typer.Option(4, help='Number of layers in the GNN model'),
+         #concat_features: bool = typer.Option(True,
+         #                                     help='Concat embeddings of each convolutional layer for final fc layers'),
+         #conv_type: str = typer.Option('GraphConv',
+         #                              help="Convolution class. Can be GCNConv or GraphConv"),
          ):
     mlflow.set_experiment(experiment.value)
     try:
@@ -27,9 +29,10 @@ def main(experiment: Experiment = typer.Argument(..., help="Dataset to use"),
         pass
     class_map = {
         Experiment.ba4label: BA4label,
+        Experiment.ba4label_unfixed: BA4label_unfixed_model,
     }
     benchmark_class = class_map[experiment]
-    benchmark = benchmark_class(sample_count, num_layers, concat_features, conv_type)
+    benchmark = benchmark_class(sample_count)#, num_layers, concat_features, conv_type)
     benchmark.run()
 
 

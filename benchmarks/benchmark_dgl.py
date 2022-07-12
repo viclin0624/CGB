@@ -21,9 +21,7 @@ sys.path.append("..")
 
 class Benchmark(object):
     '''
-    三个Benchmark的父类
-    
-    需要子类继承：create_dataset和evaluate_explanation这两个方法
+    Parent class define basic parameters and functions of benchmarks.
     '''
     NUM_GRAPHS = 2
     TEST_RATIO = 0.5
@@ -38,19 +36,19 @@ class Benchmark(object):
     EPOCHS = 400
     WEIGHT_DECAY = 0
 
-    def __init__(self, sample_count, num_layers, concat_features, conv_type):
+    def __init__(self, sample_count):#, num_layers, concat_features, conv_type):
         arguments = {
             'sample_count': sample_count,
-            'num_layers': num_layers,
-            'concat_features': concat_features,
-            'conv_type': conv_type,
+            #'num_layers': num_layers,
+            #'concat_features': concat_features,
+            #'conv_type': conv_type,
             'num_graphs': self.NUM_GRAPHS,
             'test_ratio': self.TEST_RATIO,
         }
         self.sample_count = sample_count
-        self.num_layers = num_layers
-        self.concat_features = concat_features
-        self.conv_type = conv_type
+        #self.num_layers = num_layers
+        #self.concat_features = concat_features
+        #self.conv_type = conv_type
         mlflow.log_params(arguments)
         mlflow.log_param('PGMEXPLAINER_SUBSAMPLE_PER_GRAPH', self.PGMEXPLAINER_SUBSAMPLE_PER_GRAPH)
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
