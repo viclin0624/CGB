@@ -9,7 +9,7 @@ If you want to run EXP3 in paper for training unfixed models, please run:
 ```
 sh run_unfixed.sh
 ```
-Note: default train 30 models.
+Note: default train 30 models, after that run files named EXP3_xxxx in ./benchmarks/ for next step.
 
 ## Files Description
 * benchmarks: main files are benchmark_dgl.py, fixed_dgl.py and unfixed_dgl.py, other files are some experiment files as file names.
