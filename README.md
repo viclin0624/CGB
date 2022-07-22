@@ -1,11 +1,21 @@
 # dgl-gnn-exp
 
-benchmarks: main file is fixed_dgl.py, benchmark_dgl.py and 3 benchmarks: comminity_dgl.py, saturation_dgl.py, infection_dgl.py, other files are some experiment files that have not been organized.
+## Quickly Start
+If you want to run EXP2 in paper for testing interpretation methods, please run:
+```
+sh run_fixed.sh
+```
+If you want to run EXP3 in paper for training unfixed models, please run:
+```
+sh run_unfixed.sh
+```
+Note: default train 30 models, after that run files named EXP3_xxxx in ./benchmarks/ for next step.
 
-method: main file is explain_methods_dgl.py, other files are implementation of GNNExplainer and PGMExplainer
+## Files Description
+* benchmarks: main files are benchmark_dgl.py, fixed_dgl.py and unfixed_dgl.py, other files are some experiment files as file names.
 
-mlruns: auto generate files in experiment
+* method: main file is explain_methods_dgl.py, other files are implementation of GNNExplainer and PGMExplainer.
 
-model: main file is model_dgl.py
+* mlruns: some auto generate files in experiments.
 
-model0-29: saved models in experiment
+* model: main file is model_dgl.py defining fixed model and unfixed model.
