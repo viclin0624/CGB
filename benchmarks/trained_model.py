@@ -21,58 +21,26 @@ from collections import Counter
 from benchmarks.build_graph import BA4labelDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
-'''
-def generate_single_sample(label, perturb_type, nodes_num = 25, m = 1, perturb_dic = {}, 
-    seed = None, no_attach_init_nodes=False):
-    
-    This function is for test model return a networkx instance.
-    
-    basis_type = "ba"
-    which_type = label
-    if which_type == 0:
-        if perturb_type == 0:
-            G, role_id, plug_id = build_graph(nodes_num, basis_type, [], start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
-        else:
-            G, role_id, plug_id = build_graph(nodes_num - perturb_type, basis_type, [[perturb_dic[perturb_type]]], start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
-    else:
-        list_shapes = [["house"]] * (which_type - 1) + [["five_cycle"]] * (3 - which_type)
-        if perturb_type != 0:
-            list_shapes = list_shapes + [[perturb_dic[perturb_type]]]
-        G, role_id, plug_id = build_graph(nodes_num-10-perturb_type, basis_type, list_shapes, start = 0, m = m, seed = seed, no_attach_init_nodes=no_attach_init_nodes)
-    return G
 
-def test_model_fixed(model_test, graphs_num = 1000, m = 5, nodes_num = 25, perturb_dic = {}, device = torch.device('cuda'), no_attach_init_nodes = False):
-    model_test.eval()
-    data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = perturb_dic, no_attach_init_nodes = no_attach_init_nodes)
-    testdataloader = dgl.dataloading.GraphDataLoader(data, batch_size = 16, shuffle = True)
-    correct = 0
-    total = 0
-    for g, labels in testdataloader:
-        g = g.to(device)
-        output = model_test(g, g.ndata['x'])
-        pred = output.max(dim=1)[1]
-        eq_pred = pred.eq(labels)
-        correct += eq_pred.sum().item()
-        if eq_pred.sum().item() != eq_pred.shape[0]:
-            return g,eq_pred,labels
-        total += len(labels.to(device))
-    test_acc = correct/total
-    return test_acc'''
 
 class BA4label_unfixed_model(Benchmark):
+    # number of graphs in dataset
     NUM_TRAIN_GRAPHS = 1000
-    NUM_NODES = 50
     TEST_RATIO = 0.1
-    LR = 0.003
+    # dataset parameters
+    NUM_NODES = 50
     M = 5
-    NO_ATTACH_INIT_NODES = True
-    TRAIN_BATCH_SIZE = 32
+    # others
+    ITERATION_NUM_OF_SUMMARY = 1 # num of running explanation methods times, if 1, only have original results
+    NO_ATTACH_INIT_NODES = True # motifs should not be attached to non-initial nodes in BA graph
+    # train and test batch size
+    TRAIN_BATCH_SIZE = 32 
     TEST_BATCH_SIZE = 1
-
+    
     @staticmethod
     def get_accuracy(g, correct_ids, edge_mask):
         '''
-        edge_index: 2 elements tuple, u and v
+        Calculate accuracy from correct nodes id and edge mask.
         '''
         if correct_ids == []:
             if np.all(np.mean(edge_mask) == edge_mask):
@@ -84,35 +52,25 @@ class BA4label_unfixed_model(Benchmark):
             for i in range(g.num_edges()):
                 u = g.edges()[0][i].item()
                 v = g.edges()[1][i].item()
-                if u in correct_ids and v in correct_ids: #每个双向边都计入，是否要将边缘的边改为只计入一遍？
+                if u in correct_ids and v in correct_ids: 
                     correct_edges.add((u,v))
                     correct_edges.add((v,u))
                 elif v in correct_ids:
                     correct_edges.add((u,v))
                 else:
                     continue
-            #按照单向边来计算
+            #elements in ground truth and explanation set are directional edges
             correct_count = 0
             for x in np.argsort(-edge_mask)[:len(correct_edges)]:
                 u = g.edges()[0][x].item()
                 v = g.edges()[1][x].item()
                 if (u, v) in correct_edges:
                     correct_count += 1
-            #双向边只要对一条就算对 注意 此时正确边要包含每个双向边
-            '''
-            mask_edges = set()
-            for x in np.argsort(-edge_mask)[:len(correct_edges)]:
-                u = g.edges[0][x].item()
-                v = g.edges[1][x].item()
-                if ( (u, v) in correct_edges or (v, u) in correct_edges ) and (v, u) not in mask_edges:
-                    mask_edges.add((v,u))
-                    correct_count += 2
-            '''
             return correct_count / len(correct_edges)
 
     def create_dataset(self, graphs_num, m = 6, nodes_num = 50, include_bias_class = True):
         '''
-        Return data
+        Return dataset
         '''
         data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=include_bias_class)
         print('created one')
@@ -121,13 +79,26 @@ class BA4label_unfixed_model(Benchmark):
     def is_trained_model_valid(self, test_acc):
         return test_acc == 1
 
-    def evaluate_explanation(self, explain_function, model, test_dataset, explain_name, iteration = 1, summarytype = 'sum'):
+    def evaluate_explanation(self, explain_function, model, test_dataset, explain_name, iteration = 1):
+        '''
+        Evaluate a explanation method on test dataset.
+        INPUT:
+        -------------
+        explain_function:    use which explanation method
+        model           :    explained model
+        test_dataset    :    test dataset
+        explain_name    :    explanation method name
+        iteration       :    how many times does the explanation method run, if not 1, will summarize explanation results by 4 methods
+        OUTPUT:
+        -------------
+        accs            :    accuracies of the explanation method. If iteration is not 1, there will be accs_sum and some others, meaning use "sum" method to summarize explanation result
+        '''
         accs = []
         tested_graphs = 0
-        accs1 = []
-        accs2 = []
-        accs3 = []
-        accs4 = []
+        accs_sum = []
+        accs_count13 = []
+        accs_rank = []
+        accs_count26 = []
         for g, label in tq(test_dataset):
             g = g.to(self.device)
             tested_graphs += 1
@@ -185,13 +156,13 @@ class BA4label_unfixed_model(Benchmark):
                 else:
                     correct_ids = [x for x in range(len(g.nodes())-10,len(g.nodes()))]
                 explain_acc = self.get_accuracy(g, correct_ids, sum_edge_mask)
-                accs1.append(explain_acc)
+                accs_sum.append(explain_acc)
                 explain_acc = self.get_accuracy(g, correct_ids, count13_edge_mask)
-                accs2.append(explain_acc)
+                accs_count13.append(explain_acc)
                 explain_acc = self.get_accuracy(g, correct_ids, rank_edge_mask)
-                accs3.append(explain_acc)
+                accs_rank.append(explain_acc)
                 explain_acc = self.get_accuracy(g, correct_ids, count26_edge_mask)
-                accs4.append(explain_acc)
+                accs_count26.append(explain_acc)
                 edge_mask = edge_mask_list[0]
                 
             if label == 0:
@@ -202,7 +173,7 @@ class BA4label_unfixed_model(Benchmark):
             explain_acc = self.get_accuracy(g, correct_ids, edge_mask)
             accs.append(explain_acc)
         if iteration != 1:
-            return accs,accs1,accs2,accs3,accs4
+            return accs,accs_sum,accs_count13,accs_rank,accs_count26
         return accs
 
     def train(self, model, optimizer, train_loader):
@@ -249,19 +220,24 @@ class BA4label_unfixed_model(Benchmark):
 
 
     def run(self):
+        '''
+        Run the benchmark with trained model.
+        '''
         print(f"Using device {self.device}")
         print('Number of nodes in BA graph:',self.NUM_NODES,';Parameter of BA graph:',self.M)
         benchmark_name = self.__class__.__name__
         all_explanations = defaultdict(list)
         all_runtimes = defaultdict(list)
-        for experiment_i in tq(range(self.sample_count)):
+        for experiment_i in tq(range(self.sample_count)):#Train one model in one experiment.
+            # create datasets
             train_dataset = self.create_dataset(self.NUM_TRAIN_GRAPHS, self.M, self.NUM_NODES, include_bias_class = True)
             test_dataset = self.create_dataset(int(self.NUM_TRAIN_GRAPHS*self.TEST_RATIO), self.M, self.NUM_NODES, include_bias_class = False)
-
             train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = self.TRAIN_BATCH_SIZE, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = self.TEST_BATCH_SIZE, shuffle = True)
+            # initial model
             model = GCN_unfixed(1, 4, 2, False, 'GraphConvWL').to(self.device)
             model.to(self.device)
+            # train and test model. If model is valid save model
             train_acc, test_acc = self.train_and_test(model, train_dataloader, test_dataloader)
             if not self.is_trained_model_valid(test_acc):
                 print('Model accuracy was not valid, ignoring this experiment')
@@ -275,6 +251,7 @@ class BA4label_unfixed_model(Benchmark):
             }
             mlflow.log_metrics(metrics, step=experiment_i)
 
+            # evaluate all explanation methods in "benchmark_dgl.py" files
             for explain_name in self.METHODS:
                 explain_function = eval('explain_' + explain_name)
                 duration_samples = []
@@ -286,67 +263,65 @@ class BA4label_unfixed_model(Benchmark):
                     duration_seconds = end_time - start_time
                     duration_samples.append(duration_seconds)
                     return result
-
-                time_wrapper.explain_function = explain_function
-                accs = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name)
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}, Accuracy: {np.mean(accs)}')
-
-                all_explanations[explain_name].append(list(accs))
-                all_runtimes[explain_name].extend(duration_samples)
-                metrics = {
-                    f'explain_{explain_name}_acc': np.mean(accs),
-                    f'time_{explain_name}_s_avg': np.mean(duration_samples),
-                }
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    file_path = os.path.join(tmpdir, 'accuracies.json')
-                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
-                    mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)
-
-                '''iteration_num = 10
-                summary_type = 'sum'
-
-                time_wrapper.explain_function = explain_function
-                accs, accs1, accs2, accs3, accs4 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num, summarytype = summary_type)
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}, Accuracy: {np.mean(accs)}')
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+sum, Accuracy: {np.mean(accs1)}')
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+count13, Accuracy: {np.mean(accs2)}')
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+rank, Accuracy: {np.mean(accs3)}')
-                print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+count26, Accuracy: {np.mean(accs4)}')
-                
-                all_explanations[explain_name].append(list(accs))
-                all_explanations[explain_name+str(iteration_num)+'sum'].append(list(accs1))
-                all_explanations[explain_name+str(iteration_num)+'count13'].append(list(accs2))
-                all_explanations[explain_name+str(iteration_num)+'rank'].append(list(accs3))
-                all_explanations[explain_name+str(iteration_num)+'count26'].append(list(accs4))
-                
-                all_runtimes[explain_name].extend(duration_samples)
-                all_runtimes[explain_name+str(iteration_num)+'sum'].extend(duration_samples)
-                all_runtimes[explain_name+str(iteration_num)+'count13'].extend(duration_samples)
-                all_runtimes[explain_name+str(iteration_num)+'rank'].extend(duration_samples)
-                all_runtimes[explain_name+str(iteration_num)+'count26'].extend(duration_samples)
-
-                metrics = {
-                    f'explain_{explain_name}_acc': np.mean(accs),
-                    f'time_{explain_name}_{iteration_num}_avg': np.mean(duration_samples),
-
-                    f'explain_{explain_name}_{iteration_num}_sum_acc': np.mean(accs1),
-                    f'time_{explain_name}_{iteration_num}_sum_avg': np.mean(duration_samples),
+                iteration_num = self.ITERATION_NUM_OF_SUMMARY
+                if iteration_num != 1: # use 4 kinds of summarizing methods
+                    time_wrapper.explain_function = explain_function
+                    accs, accs_sum, accs_count13, accs_rank, accs_count26 = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name, iteration = iteration_num)
+                    print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}, Accuracy: {np.mean(accs)}')
+                    print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+sum, Accuracy: {np.mean(accs_sum)}')
+                    print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+count13, Accuracy: {np.mean(accs_count13)}')
+                    print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+rank, Accuracy: {np.mean(accs_rank)}')
+                    print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}+{iteration_num}+count26, Accuracy: {np.mean(accs_count26)}')
                     
-                    f'explain_{explain_name}_{iteration_num}_count13_acc': np.mean(accs2),
-                    f'time_{explain_name}_{iteration_num}_count13_avg': np.mean(duration_samples),
+                    all_explanations[explain_name].append(list(accs))
+                    all_explanations[explain_name+str(iteration_num)+'sum'].append(list(accs_sum))
+                    all_explanations[explain_name+str(iteration_num)+'count13'].append(list(accs_count13))
+                    all_explanations[explain_name+str(iteration_num)+'rank'].append(list(accs_rank))
+                    all_explanations[explain_name+str(iteration_num)+'count26'].append(list(accs_count26))
                     
-                    f'explain_{explain_name}_{iteration_num}_rank_acc': np.mean(accs3),
-                    f'time_{explain_name}_{iteration_num}_rank_avg': np.mean(duration_samples),
+                    all_runtimes[explain_name].extend(duration_samples)
+                    all_runtimes[explain_name+str(iteration_num)+'sum'].extend(duration_samples)
+                    all_runtimes[explain_name+str(iteration_num)+'count13'].extend(duration_samples)
+                    all_runtimes[explain_name+str(iteration_num)+'rank'].extend(duration_samples)
+                    all_runtimes[explain_name+str(iteration_num)+'count26'].extend(duration_samples)
 
-                    f'explain_{explain_name}_{iteration_num}_count26_acc': np.mean(accs4),
-                    f'time_{explain_name}_{iteration_num}_count26_avg': np.mean(duration_samples),
-                }
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    file_path = os.path.join(tmpdir, 'accuracies.json')
-                    json.dump(all_explanations, open(file_path, 'w'), indent=2)
-                    mlflow.log_artifact(file_path)
-                mlflow.log_metrics(metrics, step=experiment_i)'''
+                    metrics = {
+                        f'explain_{explain_name}_acc': np.mean(accs),
+                        f'time_{explain_name}_{iteration_num}_avg': np.mean(duration_samples),
+
+                        f'explain_{explain_name}_{iteration_num}_sum_acc': np.mean(accs_sum),
+                        f'time_{explain_name}_{iteration_num}_sum_avg': np.mean(duration_samples),
+                        
+                        f'explain_{explain_name}_{iteration_num}_count13_acc': np.mean(accs_count13),
+                        f'time_{explain_name}_{iteration_num}_count13_avg': np.mean(duration_samples),
+                        
+                        f'explain_{explain_name}_{iteration_num}_rank_acc': np.mean(accs_rank),
+                        f'time_{explain_name}_{iteration_num}_rank_avg': np.mean(duration_samples),
+
+                        f'explain_{explain_name}_{iteration_num}_count26_acc': np.mean(accs_count26),
+                        f'time_{explain_name}_{iteration_num}_count26_avg': np.mean(duration_samples),
+                    }
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        file_path = os.path.join(tmpdir, 'accuracies.json')
+                        json.dump(all_explanations, open(file_path, 'w'), indent=2)
+                        mlflow.log_artifact(file_path)
+                    mlflow.log_metrics(metrics, step=experiment_i)
+                else:# only run explanation method one time
+                    time_wrapper.explain_function = explain_function
+                    accs = self.evaluate_explanation(time_wrapper, model, test_dataset, explain_name)
+                    print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1}, Explain Method: {explain_name}, Accuracy: {np.mean(accs)}')
+
+                    all_explanations[explain_name].append(list(accs))
+                    all_runtimes[explain_name].extend(duration_samples)
+                    metrics = {
+                        f'explain_{explain_name}_acc': np.mean(accs),
+                        f'time_{explain_name}_s_avg': np.mean(duration_samples),
+                    }
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        file_path = os.path.join(tmpdir, 'accuracies.json')
+                        json.dump(all_explanations, open(file_path, 'w'), indent=2)
+                        mlflow.log_artifact(file_path)
+                    mlflow.log_metrics(metrics, step=experiment_i)
 
 
             print(f'Benchmark:{benchmark_name} Run #{experiment_i + 1} finished. Average Explanation Accuracies for each method:')
@@ -363,42 +338,3 @@ class BA4label_unfixed_model(Benchmark):
                 summary = {'accuracies': accuracies_summary, 'runtime': runtime_summary}
                 json.dump(summary, open(file_path, 'w'), indent=2)
                 mlflow.log_artifact(file_path)
-
-'''def test_model_acc():
-    model_fixed = FixedNet(1, 4, 2, False, 'GraphConvWL')
-    model_fixed.set_paramerters()
-    device = torch.device('cuda')
-    model_fixed = model_fixed.to(device)
-    model_fixed.unuse_report()
-    G = generate_single_sample(3, 0, nodes_num = 25, m = 6, perturb_dic = {4:'square_diagonal'}, seed = 0, no_attach_init_nodes = True)
-    pos = nx.spring_layout(G, seed = 0)
-    nx.draw(G, pos, with_labels = True, font_color = 'white')
-    g = dgl.from_networkx(G)
-    g = g.to(device)
-    output = model_fixed(g, torch.ones((25,1)).to(device))
-    print(output)
-    test_acc = test_model_fixed(model_fixed, graphs_num = 1000, m = 6, nodes_num = 50, no_attach_init_nodes = True)
-    print(test_acc)
-
-def test_model_output_distribution(graph_class,graph_num):
-    model_fixed = FixedNet(1, 4, 2, False, 'GraphConvWL')
-    model_fixed.set_paramerters()
-    device = torch.device('cuda')
-    model_fixed = model_fixed.to(device)
-    model_fixed.unuse_report()
-    result = []
-    for i in range(graph_num):
-        G = generate_single_sample(graph_class, 0, nodes_num = 50, m = 6, perturb_dic = {}, no_attach_init_nodes = True)
-        G = dgl.from_networkx(G)
-        cut_index = np.random.choice(list(range(G.num_edges())))
-        G = dgl.remove_edges(G, cut_index)
-        G = G.to(device)
-        result.append(model_fixed(G, torch.ones((50,1)).to(device)))
-    print(result)
-    return result'''
-
-
-if __name__ == '__main__':
-    A = BA4label(10,1,True,'GraphConvWL')
-    A.run()
-    #test_model_output_distribution(3,20)

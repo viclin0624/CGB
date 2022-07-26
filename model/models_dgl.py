@@ -156,7 +156,7 @@ class GCN_fixed(nn.Module):
     def unuse_report(self):
         self.report = False
 
-    def set_paramerters(self):
+    def set_paramerters(self, theta = 3):
         k = 0
         for p in self.parameters():
             if k == 0 or k == 2:
@@ -164,7 +164,7 @@ class GCN_fixed(nn.Module):
             elif k == 3:
                 torch.nn.init.constant_(p, -1)
             elif k == 5:
-                torch.nn.init.constant_(p, 3)
+                torch.nn.init.constant_(p, theta)
             elif k == 1 or k == 4:
                 torch.nn.init.constant_(p, 0)
             elif k == 6: #W in fc1
@@ -177,7 +177,9 @@ class GCN_fixed(nn.Module):
                     self.fc1.weight = torch.nn.Parameter(temp)
             elif k == 7: #Bias in fc1
                 with torch.no_grad():
-                    temp = torch.tensor([0.01,0.01, -19.99,20.01, -13.99,14.01, -7.99,8.01],dtype = torch.float32)
+                    threshold = self.calculate_value_in_MLP(theta)
+                    print(threshold)
+                    temp = torch.tensor(threshold,dtype = torch.float32)
                     self.fc1.bias = torch.nn.Parameter(temp)
             elif k == 8: #W in fc2
                 with torch.no_grad():
@@ -204,7 +206,17 @@ class GCN_fixed(nn.Module):
             elif k == 1 or k == 4:
                 torch.nn.init.constant_(p, p.item()+np.random.uniform(low,high))
             k += 1
-
+    def calculate_value_in_MLP(self, theta):
+        #only for "house" and "five-node cycle"
+        if self.is_hyperparameter_valid(theta, 5):
+            house = max(3*theta-9,0)+max(4*theta-11,0)+max(3*theta-7,0)+max(3*theta-8,0)
+            five_node_cycle = max(3*theta-7,0)+max(3*theta-6,0)+max(3*theta-6,0)+max(3*theta-7,0)
+            return [0.01,0.01,-(five_node_cycle*2-0.01),five_node_cycle*2+0.01,-(five_node_cycle+house-0.01),five_node_cycle+house+0.01,
+            -(house*2-0.01), house*2+0.01]
+        else:
+            return None
+    def is_hyperparameter_valid(self, theta, m):
+        return True
 
 
 class Net2(torch.nn.Module):

@@ -1,4 +1,4 @@
-#增加禁止attach在初始m个结点上的参数选项
+#include some other motifs not used in experiments
 import numpy as np
 import networkx as nx
 import math
