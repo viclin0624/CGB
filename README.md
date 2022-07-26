@@ -1,7 +1,7 @@
 # dgl-gnn-exp
 
 ## Quickly Start
-If you want to run EXP2 in paper for testing interpretation methods, please run:
+If you want to run EXP2 in paper for testing explanation methods, please run:
 ```
 sh run_fixed.sh
 ```
