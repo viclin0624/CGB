@@ -1,7 +1,7 @@
 
 import sys
 sys.path.append('..')
-from model.models_dgl import GCN_fixed
+from model.models_dgl import GCN_designed
 from build_graph import build_graph
 import dgl
 import torch
@@ -39,7 +39,7 @@ def run(graphs_num: int = typer.Argument(..., help = 'Graph nums'),
     NODES_NUM = nodes_num
     low_bound = [0.1 * i for i in range(10)]
     device = torch.device(device)
-    fixed_model = GCN_fixed(1,4,2,False,'GraphConvWL')
+    fixed_model = GCN_designed(1,4,2,False,'GraphConvWL')
     fixed_model.set_paramerters()
     fixed_model.to(device)
     

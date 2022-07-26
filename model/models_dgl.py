@@ -53,12 +53,12 @@ class GraphConvWL(nn.Module):
         self_feat = self.conv_from_self(feat)
         return neigh_feat+self_feat
 
-class GCN_unfixed(torch.nn.Module):
+class GCN_trained(torch.nn.Module):
     '''
     For graph classification
     '''
     def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Sum'):
-        super(GCN_unfixed, self).__init__()
+        super(GCN_trained, self).__init__()
         dim = 16
         self.convs = torch.nn.ModuleList()
         self.readout = readout 
@@ -102,12 +102,13 @@ class GCN_unfixed(torch.nn.Module):
         hg = self.fc(hg)
         return F.log_softmax(hg, dim=1)
 
-class GCN_fixed(nn.Module):
+class GCN_designed(nn.Module):
     '''
     Control parameters in this model and can use use_report and unuse_report to set if report every output of layers.
     '''
     def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, report = False):
-        super(GCN_fixed, self).__init__()
+        super(GCN_designed, self).__init__()
+        self.theta = 3
         dim = 1
         self.report = report
         self.convs = torch.nn.ModuleList()
@@ -156,7 +157,8 @@ class GCN_fixed(nn.Module):
     def unuse_report(self):
         self.report = False
 
-    def set_paramerters(self, theta = 3):
+    def set_paramerters(self):
+        theta = self.theta
         k = 0
         for p in self.parameters():
             if k == 0 or k == 2:
@@ -221,10 +223,10 @@ class GCN_fixed(nn.Module):
 
 class Net2(torch.nn.Module):
     '''
-    Same to GCN_unfixed.
+    Same to GCN_trained.
     '''
     def __init__(self, num_node_features, num_classes, num_layers, concat_features, conv_type, readout = 'Sum'):
-        super(GCN_unfixed, self).__init__()
+        super(GCN_trained, self).__init__()
         dim = 16
         self.convs = torch.nn.ModuleList()
         self.readout = readout 

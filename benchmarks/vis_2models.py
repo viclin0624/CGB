@@ -17,7 +17,7 @@ from tqdm import tqdm as tq
 import mlflow
 from collections import defaultdict
 sys.path.append('..')
-from model.models_dgl import GCN_fixed
+from model.models_dgl import GCN_designed
 from collections import Counter
 from benchmarks.build_graph import BA4labelDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
@@ -28,7 +28,7 @@ try:
     model = torch.load('/home/ubuntu/Maolin/eva_gnn/dgl-gnn-exp/benchmarks/result_models/model9.pkl')
 except:
     print('Please set the correct path of model.')
-model2 = GCN_fixed(1, 4, 2, False, 'GraphConvWL')
+model2 = GCN_designed(1, 4, 2, False, 'GraphConvWL')
 model2.set_paramerters()
 data = BA4labelDataset(graphs_num=10, m = 5, nodes_num=50, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
 test_dataloader = dgl.dataloading.GraphDataLoader(data, batch_size = 1, shuffle = True)

@@ -16,7 +16,7 @@ from tqdm import tqdm as tq
 import mlflow
 from collections import defaultdict
 sys.path.append('..')
-from model.models_dgl import GCN_unfixed
+from model.models_dgl import GCN_trained
 from collections import Counter
 from benchmarks.build_graph import BA4labelDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
@@ -235,7 +235,7 @@ class BA4label_unfixed_model(Benchmark):
             train_dataloader = dgl.dataloading.GraphDataLoader(train_dataset, batch_size = self.TRAIN_BATCH_SIZE, shuffle = True)
             test_dataloader = dgl.dataloading.GraphDataLoader(test_dataset, batch_size = self.TEST_BATCH_SIZE, shuffle = True)
             # initial model
-            model = GCN_unfixed(1, 4, 2, False, 'GraphConvWL').to(self.device)
+            model = GCN_trained(1, 4, 2, False, 'GraphConvWL').to(self.device)
             model.to(self.device)
             # train and test model. If model is valid save model
             train_acc, test_acc = self.train_and_test(model, train_dataloader, test_dataloader)
