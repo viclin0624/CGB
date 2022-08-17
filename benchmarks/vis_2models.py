@@ -46,7 +46,7 @@ def draw_explanation(g, edge_mask, name, pos = None):
     g_nx = dgl.to_networkx(g,edge_attrs=['weight']) 
     edges = g_nx.edges()
     weighted_edges = [(node1,node2) for (node1,node2,edge_attr) in g_nx.edges(data=True)]
-    width = (torch.tensor(edge_mask)-np.min(edge_mask))/np.max(edge_mask)
+    width = (torch.tensor(edge_mask)-np.min(edge_mask))/np.max(edge_mask)*0.9+0.1
     #set nodes color
     node_color = ['b' for i in range(g.num_nodes())]
     for i in range(1,11):
@@ -54,13 +54,20 @@ def draw_explanation(g, edge_mask, name, pos = None):
     #set edges color
     edge_color = ['b' for i in range(g.num_edges())]
     ground_truth_num_dic = {1:22, 2:24, 3:26} #number of edges in ground truth with different categories
-    k = 0 
+    '''k = 0 
     for i in np.argsort(-edge_mask):
         if k < ground_truth_num_dic[label]:
             edge_color[i] = 'r'
-        else:
-            width[i] = 0
-        k += 1
+        #else:
+            #width[i] = 0
+        k += 1'''
+    #for i in range(ground_truth_num_dic[label]-2):
+        #edge_color[-(i+1)] = 'r'
+    for i in range(g.num_edges()):
+        if g.edges()[1][i] in list(range(g.num_nodes()-10, g.num_nodes())) :
+            edge_color[i] ='r'
+        elif g.edges()[0][i] in list(range(g.num_nodes()-10, g.num_nodes())) and g.edges()[1][i] in list(range(g.num_nodes()-10, g.num_nodes())):
+            edge_color[i] = 'r'
     pos = nx.circular_layout(g_nx)
     if pos == None:
         pos = nx.spring_layout(g_nx) #eg: modify position of nodes in class 3
@@ -103,5 +110,10 @@ for g, label in test_dataloader:
     edge_mask = explain_ig(model, 'graph', g, g.ndata['x'], label)
     model_result = model(g, g.ndata['x'])
     draw_explanation(g, edge_mask, str(count)+'uf'+str(label.cpu().item())+str(model_result.detach().cpu().numpy()),pos)
+    plt.xticks(size = 40)
+    plt.yticks(size = 40)
+    plt.xlim(-4,4)
+    plt.hist(edge_mask,bins = 50)
+    plt.savefig('visresult/hist'+str(count)+'.png')
     
     

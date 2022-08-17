@@ -41,7 +41,9 @@ class Graph_Explainer:
         
         X_perturb = feature_matrix.detach().clone()
         perturb_array = X_perturb[node_idx].detach().clone()
+        perturb_array = perturb_array
         epsilon = 0.05*torch.max(self.X_feat, dim = 0)[0]
+        epsilon = epsilon.cpu()
         seed = np.random.randint(2)
         
         if random == 1:
@@ -57,7 +59,7 @@ class Graph_Explainer:
                         elif self.perturb_mode == "uniform":
                             perturb_array[i] = perturb_array[i] + np.random.uniform(low=-epsilon[i], high=epsilon[i])
                             if perturb_array[i] < 0:
-                                perturb_array[i] = 0
+                                perturb_array[i] = 0 
                             elif perturb_array[i] > torch.max(self.X_feat, dim = 0)[0][i]:
                                 perturb_array[i] = torch.max(self.X_feat, dim = 0)[0][i]
 
@@ -71,6 +73,7 @@ class Graph_Explainer:
         X_torch = self.X_feat.detach().clone()
         E_torch = self.E_feat.detach().clone()
         pred_torch = self.model.forward(self.graph, X_torch, E_torch).cpu()
+        #print(pred_torch)
         soft_pred = np.asarray(softmax(np.asarray(pred_torch[0].data)))
         pred_label = np.argmax(soft_pred)
         num_nodes = self.X_feat.shape[0]

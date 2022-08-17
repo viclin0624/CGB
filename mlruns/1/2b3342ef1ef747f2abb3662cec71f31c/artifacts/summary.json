@@ -1,0 +1,15 @@
+{
+  "accuracies": {
+    "pgmexplainer": {
+      "avg": 0.04870337995337995,
+      "std": 0.0,
+      "count": 1
+    }
+  },
+  "runtime": {
+    "pgmexplainer": {
+      "avg": 1.6959912514686584,
+      "std": 0.00755022899306758
+    }
+  }
+}

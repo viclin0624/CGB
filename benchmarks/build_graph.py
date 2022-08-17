@@ -240,7 +240,7 @@ def build_graph(
     basis_type,
     list_shapes,
     start=0,
-    rdm_basis_plugins=False,
+    rdm_basis_plugins=True,
     add_random_edges=0,
     m=5,
     seed = None,

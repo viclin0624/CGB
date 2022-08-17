@@ -48,7 +48,7 @@ def explain_sa(model, task_type, g, x, target):
     saliency = Saliency(model_forward)
     input_mask = torch.ones(g.num_edges()).requires_grad_(True).to(device)
     input_mask.retain_grad()
-    attr = saliency.attribute(input_mask, target=int(target), additional_forward_args = (g,model,x), abs = False)
+    attr = saliency.attribute(input_mask, target=int(target), additional_forward_args = (g,model,x), abs = True)
     attr = attr.detach().cpu().numpy()
     return attr
 
@@ -76,7 +76,7 @@ def explain_pgmexplainer(model, task_type, g, x, target, include_edges=None):
     #Implement Graph_Explainer with 
     e = pe.Graph_Explainer(model, g,
                             perturb_feature_list = [0],
-                            perturb_mode = "mean",
+                            perturb_mode = "uniform",
                             perturb_indicator = "diff")
     pgm_nodes, p_values, candidates = e.explain(num_samples = 1000, percentage = 10, 
                             top_node = 12, p_threshold = 0.05, pred_threshold = pred_threshold)

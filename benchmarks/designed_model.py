@@ -30,7 +30,7 @@ class BA4label(Benchmark):
     NUM_NODES = 50
     M = 5
     # others
-    ITERATION_NUM_OF_SUMMARY = 1 # num of running explanation methods times, if 1, only have original results
+    ITERATION_NUM_OF_SUMMARY = 10 # num of running explanation methods times, if 1, only have original results
     NO_ATTACH_INIT_NODES = True # motifs should not be attached to non-initial nodes in BA graph
 
     @staticmethod

@@ -22,9 +22,9 @@ class Benchmark(object):
     Parent class define basic parameters and functions of benchmarks. Set explanation methods and hyperparameters for training model.
     '''
     METHODS = [
-    #'pgmexplainer',
-    #'gnnexplainer',
-    #'sa',
+    'pgmexplainer',
+    'gnnexplainer',
+    'sa',
     'random',
     'ig'           ]
     LR = 0.003

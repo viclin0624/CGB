@@ -180,7 +180,6 @@ class GCN_designed(nn.Module):
             elif k == 7: #Bias in fc1
                 with torch.no_grad():
                     threshold = self.calculate_value_in_MLP(theta)
-                    print(threshold)
                     temp = torch.tensor(threshold,dtype = torch.float32)
                     self.fc1.bias = torch.nn.Parameter(temp)
             elif k == 8: #W in fc2
