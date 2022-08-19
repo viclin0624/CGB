@@ -1,9 +1,9 @@
 # CGB: Controllable Graph Benchmark for Evaluation of Graph Neural Network Explanation Methods
 
 ## Quickly Start
-You can create a new environment by this command.
+We use python 3.8.0, pytorch 1.7.1 and dgl 0.7.2，you can run this command to install packages.
 ```
-conda create --name <env> --file requirements.txt
+pip install -r requirements.txt 
 ```
 If you want to run Experiment 1 in paper for testing explanation methods, please run:
 ```
