@@ -1,0 +1,4 @@
+artifact_location: file:///home/ubuntu/Maolin/eva_gnn/dgl-gnn-exp/mlruns/4
+experiment_id: '4'
+lifecycle_stage: active
+name: CGB_undesigned

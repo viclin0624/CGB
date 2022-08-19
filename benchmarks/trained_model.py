@@ -18,12 +18,12 @@ from collections import defaultdict
 sys.path.append('..')
 from model.models_dgl import GCN_trained
 from collections import Counter
-from benchmarks.build_graph import BA4labelDataset,build_graph
+from benchmarks.build_graph import CGBDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
 
 
-class BA4label_unfixed_model(Benchmark):
+class CGB_undesigned_model(Benchmark):
     # number of graphs in dataset
     NUM_TRAIN_GRAPHS = 1000
     TEST_RATIO = 0.1
@@ -72,7 +72,7 @@ class BA4label_unfixed_model(Benchmark):
         '''
         Return dataset
         '''
-        data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=include_bias_class)
+        data = CGBDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=include_bias_class)
         print('created one')
         return data
 

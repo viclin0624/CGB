@@ -4,11 +4,11 @@ from enum import Enum
 import mlflow
 import typer
 
-from benchmarks.designed_model import BA4label
-from benchmarks.trained_model import BA4label_unfixed_model
+from benchmarks.designed_model import CGB
+from benchmarks.trained_model import CGB_undesigned_model
 class Experiment(str, Enum):
-    ba4label = "ba4label"
-    ba4label_unfixed = "ba4label_unfixed"
+    CGB = "CGB"
+    CGB_undesigned = "CGB_undesigned"
 
 
 def main(experiment: Experiment = typer.Argument(..., help="Dataset to use"),
@@ -24,8 +24,8 @@ def main(experiment: Experiment = typer.Argument(..., help="Dataset to use"),
     except FileNotFoundError:
         pass
     class_map = {
-        Experiment.ba4label: BA4label,
-        Experiment.ba4label_unfixed: BA4label_unfixed_model,
+        Experiment.CGB: CGB,
+        Experiment.CGB_undesigned: CGB_undesigned_model,
     }
     #run benchmarks
     benchmark_class = class_map[experiment]

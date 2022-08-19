@@ -18,11 +18,11 @@ from collections import defaultdict
 sys.path.append('..')
 from model.models_dgl import GCN_designed
 from collections import Counter
-from benchmarks.build_graph import BA4labelDataset,build_graph
+from benchmarks.build_graph import CGBDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
 
-class BA4label(Benchmark):
+class CGB(Benchmark):
     # number of graphs in dataset
     NUM_TRAIN_GRAPHS = 100
     NUM_TEST_GRAPHS = 100
@@ -68,7 +68,7 @@ class BA4label(Benchmark):
         '''
         Return dataset
         '''
-        data = BA4labelDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
+        data = CGBDataset(graphs_num=graphs_num, m = m, nodes_num=nodes_num, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
         print('created one')
         return data
 

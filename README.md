@@ -1,11 +1,11 @@
 # dgl-gnn-exp
 
 ## Quickly Start
-If you want to run EXP2 in paper for testing explanation methods, please run:
+If you want to run EXP1 in paper for testing explanation methods, please run:
 ```
 sh run_fixed.sh
 ```
-If you want to run EXP3 in paper for training unfixed models, please run:
+If you want to run EXP2 in paper for training unfixed models, please run:
 ```
 sh run_unfixed.sh
 ```

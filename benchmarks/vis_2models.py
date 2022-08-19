@@ -19,7 +19,7 @@ from collections import defaultdict
 sys.path.append('..')
 from model.models_dgl import GCN_designed
 from collections import Counter
-from benchmarks.build_graph import BA4labelDataset,build_graph
+from benchmarks.build_graph import CGBDataset,build_graph
 from benchmarks.benchmark_dgl import Benchmark
 from method.explain_methods_dgl import explain_random, explain_ig, explain_sa, explain_gnnexplainer, explain_pgmexplainer
 import matplotlib.pyplot as plt
@@ -30,7 +30,7 @@ except:
     print('Please set the correct path of model.')
 model2 = GCN_designed(1, 4, 2, False, 'GraphConvWL')
 model2.set_paramerters()
-data = BA4labelDataset(graphs_num=10, m = 5, nodes_num=50, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
+data = CGBDataset(graphs_num=10, m = 5, nodes_num=50, perturb_dic = {}, no_attach_init_nodes = True, include_bias_class=False)
 test_dataloader = dgl.dataloading.GraphDataLoader(data, batch_size = 1, shuffle = True)
 
 def draw_explanation(g, edge_mask, name, pos = None):

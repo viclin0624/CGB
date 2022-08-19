@@ -1,1 +1,1 @@
-python main.py ba4label
+python main.py CGB

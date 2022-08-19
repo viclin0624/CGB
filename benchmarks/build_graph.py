@@ -330,7 +330,7 @@ def build_graph(
         return basis, role_id, []
 
 
-class BA4labelDataset(DGLDataset):
+class CGBDataset(DGLDataset):
     basis_type = "ba"
 
     def __init__(self, graphs_num = 1000, nodes_num = 25, m = 1, perturb_dic = {}, no_attach_init_nodes = False, include_bias_class = True):
@@ -340,7 +340,7 @@ class BA4labelDataset(DGLDataset):
         self.perturb_dic = perturb_dic
         self.no_attach_init_nodes = no_attach_init_nodes
         self.include_bias_class = include_bias_class
-        super(BA4labelDataset, self).__init__('BA4labelDataset')
+        super(CGBDataset, self).__init__('CGBDataset')
 
     def process(self):
         self.graphs = []
