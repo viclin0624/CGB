@@ -1,6 +1,10 @@
 # CGB: Controllable Graph Benchmark for Evaluation of Graph Neural Network Explanation Methods
 
 ## Quickly Start
+You can create a new environment by this command.
+```
+conda create --name <env> --file requirements.txt
+```
 If you want to run Experiment 1 in paper for testing explanation methods, please run:
 ```
 sh run_designed.sh
