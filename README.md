@@ -1,7 +1,7 @@
 # CGB: Controllable Graph Benchmark for Evaluation of Graph Neural Network Explanation Methods
 
 ## Quickly Start
-We use python 3.8.0, pytorch 1.7.1 and dgl 0.7.2. You can use this command install packages.
+We use python 3.8.0, pytorch 1.7.1 and dgl 0.7.2. You can use this command to install packages.
 ```
 pip install -r requirements.txt 
 ```
