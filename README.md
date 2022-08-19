@@ -41,5 +41,27 @@ mlflow ui
 ```
 You can use this command to see results in browser
 
+## Run time
+For experiment 1, we run every explanation methods 10 times ("ITERATION_NUM_OF_SUMMARY" in designed_model.py) for aggregating explanation results and run total experiment 10 times to get average of accuracy with default hyperparameters. 
+
+* One experiments for PGMExplainer: 90 minutes
+
+* One experiments for GNNExplainer: 6 minutes
+
+* One experiments for SA: 30 seconds
+
+* One experiments for Random: 22 seconds
+
+* One experiments for IG: 19 minutes (about 7 minutes on GPU)
+
+You can select to run which explanation methods in /benchmarks/benchmark_dgl.py. Total experiment 1 will cost about 19h30m.
+
+For experiment 2, we first train model, run IG 1 times ("ITERATION_NUM_OF_SUMMARY" in trained_model.py) without aggregating explanation results and run total experiment 10 times to get average of accuracy with default hyperparameters. 
+
+* Train one model: 3 minutes
+
+* Explain one model on 100 samples: 2 minutes
+
+Total 30 model will cost about 2h30m.
 ## Run experiments on GPU
 To adapt to different machines, we modify codes to CPU version. If you want to run these codes on GPU, dgl with appropriate cuda version is needed and you should reset the device in benchmarks/benchmark_dgl.py line 46 and method/explain_methods_dgl.py line 18. If you want to run the benchmarks/vis_2models.py, the line 99 also need to be modified.
