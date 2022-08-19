@@ -1,4 +1,4 @@
-# dgl-gnn-exp
+# CGB: Controllable Graph Benchmark for Evaluation of Graph Neural Network Explanation Methods
 
 ## Quickly Start
 If you want to run EXP1 in paper for testing explanation methods, please run:
