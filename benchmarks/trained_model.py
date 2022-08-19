@@ -252,7 +252,7 @@ class CGB_undesigned_model(Benchmark):
             mlflow.log_metrics(metrics, step=experiment_i)
 
             # evaluate all explanation methods in "benchmark_dgl.py" files
-            for explain_name in self.METHODS:
+            for explain_name in ['ig']:#self.METHODS:
                 explain_function = eval('explain_' + explain_name)
                 duration_samples = []
 
