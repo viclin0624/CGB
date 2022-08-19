@@ -22,7 +22,7 @@ Note: default train 30 models, after that run files named EXP2_xxxx in ./benchma
 
 * mlruns: some auto generate files in experiments.
 
-* model: main file is model_dgl.py defining fixed model and unfixed model.
+* model: main file is model_dgl.py defining designed model and trained model.
 
 ## Set hyperparameters
 * benchmarks/benchmark_dgl.py: use which explanation methods and learning rate when train models
