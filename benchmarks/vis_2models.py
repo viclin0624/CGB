@@ -96,7 +96,7 @@ def draw_explanation(g, edge_mask, name, pos = None):
     plt.savefig('visresult/'+name+'.png')
     plt.close()
     return pos
-device = torch.device('cuda:0')
+device = torch.device('cpu')#('cuda:0')
 count = -1 
 model2.to(device)
 model.to(device)

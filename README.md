@@ -1,7 +1,7 @@
 # CGB: Controllable Graph Benchmark for Evaluation of Graph Neural Network Explanation Methods
 
 ## Quickly Start
-You can create a new environment by this command.
+We use python 3.8.0, pytorch 1.7.1 and dgl 0.7.2. You can use this command to install packages. (Notice: This command install cpu version of dgl, if you want to run experiment on gpu, it needs to manually install from https://docs.dgl.ai/en/0.7.x/install/index.html and reset device in code. You can see details in the last section.)
 ```
 pip install -r requirements.txt 
 ```
@@ -38,3 +38,6 @@ Note: default train 30 models, after that run files named EXP2_xxxx in ./benchma
 mlflow ui
 ```
 You can use this command to see results in browser
+
+## Run experiments on GPU
+To adapt to different machines, we modify codes to CPU version. If you want to run these codes on GPU, dgl with appropriate cuda version is needed and you should reset the device in benchmarks/benchmark_dgl.py line 46 and method/explain_methods_dgl.py line 18. If you want to run the benchmarks/vis_2models.py, the line 99 also need to be modified.

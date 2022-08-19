@@ -15,7 +15,7 @@ import method.pgm_explainer as pe
 from torch.utils.data import DataLoader
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')#('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def model_forward(input_mask, g, model, x):

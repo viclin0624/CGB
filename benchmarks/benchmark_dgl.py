@@ -22,11 +22,11 @@ class Benchmark(object):
     Parent class define basic parameters and functions of benchmarks. Set explanation methods and hyperparameters for training model.
     '''
     METHODS = [
-    #'pgmexplainer',
-    #'gnnexplainer',
+    'pgmexplainer',
+    'gnnexplainer',
     'sa',
-    #'random',
-    #'ig'           
+    'random',
+    'ig'           
     ]
     LR = 0.003
     EPOCHS = 400
@@ -43,7 +43,7 @@ class Benchmark(object):
         self.sample_count = sample_count
 
         mlflow.log_params(arguments)
-        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')#('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     def create_dataset(self):
         raise NotImplementedError
